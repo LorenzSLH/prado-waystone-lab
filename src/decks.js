@@ -14,10 +14,11 @@ export const DECKS = {
     sourceUrl: 'https://www.pradotraveler.com/decks/131',
     recipe: ['City Rune · Tier 1', 'Mud Rune · Tier 2', 'Wildcard'],
     composition: { monster: 4, event: 1, rest: 1, wild: 1 },
+    defaultUnits: { M: 4, S: 1, F: 1, E: 1, W: 1 },
     routes: [
       { id: 'r0', name: 'The Flood Channel', subtitle: 'Black water and low arches', bias: 'M' },
       { id: 'r1', name: 'The Service Tunnels', subtitle: 'Valves, grates and sealed rooms', bias: 'E' },
-      { id: 'r2', name: 'The Ossuary Run', subtitle: 'Bones behind rusted iron', bias: 'H' },
+      { id: 'r2', name: 'The Ossuary Run', subtitle: 'Bones behind rusted iron', bias: 'W' },
     ],
     cards: [
       card("Engineer's Office", 'rest', 'C', 'An abandoned maintenance office offers a brief refuge from the tunnels.'),
@@ -68,9 +69,10 @@ export const DECKS = {
     sourceUrl: 'https://www.pradotraveler.com/decks/124',
     recipe: ['Wildcard', 'Wildcard', 'Wildcard'],
     composition: { monster: 4, event: 1, rest: 1, wild: 1 },
+    defaultUnits: { M: 4, S: 1, F: 1, E: 1, W: 1 },
     routes: [
       { id: 'r0', name: 'The Riverbank', subtitle: 'Shrines beside slow water', bias: 'E' },
-      { id: 'r1', name: 'The Sunlit Hills', subtitle: 'Long views and exposed trails', bias: 'H' },
+      { id: 'r1', name: 'The Sunlit Hills', subtitle: 'Long views and exposed trails', bias: 'W' },
       { id: 'r2', name: 'The Overgrown Glades', subtitle: 'Flowers, roots and hidden nests', bias: 'F' },
     ],
     cards: [
@@ -130,7 +132,8 @@ export function deckFor(id) {
 
 export function contentPool(deck, type) {
   if (type === 'M') return deck.monsters.filter(entry => !Object.values(deck.bosses).includes(entry.name));
-  if (type === 'H') return deck.monsters.filter(entry => ['U', 'R'].includes(entry.rarity) && !Object.values(deck.bosses).includes(entry.name)).concat(deck.monsters.filter(entry => entry.name === deck.hunt));
+  if (type === 'W') return deck.monsters.filter(entry => !Object.values(deck.bosses).includes(entry.name));
   if (type === 'F') return deck.cards.filter(entry => entry.cardType === 'skill_check');
-  return deck.cards.filter(entry => entry.cardType !== 'skill_check');
+  if (type === 'S') return deck.cards.filter(entry => entry.cardType === 'shrine');
+  return deck.cards.filter(entry => !['skill_check', 'shrine'].includes(entry.cardType));
 }

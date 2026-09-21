@@ -1,6 +1,6 @@
 # Prado · Waystone Map Lab
 
-Ein lokal spielbares Kartenlabor nach dem [Implementierungsplan](Prado-Codex-Implementierungsplan.md) und den weiterentwickelten [Kartenregeln v3](docs/DESIGN-v3.md): **zwei echte Waystone-Inhaltsprofile, drei Runen, sichtbare Pfade mit unbekannten Inhalten, geheime Seitenarme und Ebenenbosse.** Eigene SVG-Symbole, eine gezeichnete Pergamentkarte und ein auf Mobilgeräten einklappbares Detailpanel. Keine externen Assets oder Laufzeitabhängigkeiten.
+Ein lokal spielbares Kartenlabor nach dem [Implementierungsplan](Prado-Codex-Implementierungsplan.md) und den weiterentwickelten [Kartenregeln v4](docs/DESIGN-v4.md): **zwei echte Waystone-Inhaltsprofile, gewichtete Entscheidungen, wieder zusammenlaufende und neu abzweigende Pfade, geheime Seitenarme und Ebenenbosse.** Eigene SVG-Symbole, eine gezeichnete Pergamentkarte und ein auf Mobilgeräten einklappbares Detailpanel. Keine externen Assets oder Laufzeitabhängigkeiten.
 
 Die Namen, Deckrezepte und Kartenlisten stammen aus den offiziellen Deckseiten für [The Filthworks](https://www.pradotraveler.com/decks/131) und [Meadowland Wilds](https://www.pradotraveler.com/decks/124). Beschreibungen und Grafiken im Prototyp sind eigenständig. Die Zuordnung zu Mini- und Endbossen ist eine Testregel dieses Labors.
 
@@ -47,22 +47,24 @@ Alle Beispiele verwenden Jagd / Wildnis / Ruine und getrennte Horizonte:
 ## Regeln des Labors
 
 - Exakt drei unterschiedliche Runen. Die sechs Katalogrunen und Levelprofile liegen in `src/config.js`.
-- Globales Typbudget per Largest Remainder, inklusive fester Feature-Plätze. Die angezeigten Mengen gelten für die **gesamte Karte**, nicht für jeden einzelnen Weg.
+- Das Deck-Grundbudget wird per Largest Remainder an die Kartengröße angepasst; danach verändern Runen die fünf Kartenzahlen absolut. Die angezeigten Mengen gelten für die **gesamte Karte**, nicht für jeden einzelnen Weg.
 - Level 1–5: 8 / 12 / 16 / 20 / 24 Begegnungen pro vollständigem Abenteuer, 2 / 2 / 3 / 3 / 3 Hauptwege je Ebene. Standardmäßig 1 / 1 / 2 / 2 / 3 Ebenen.
 - Getrennte Seed-Streams für Topologie, Inhalt, Gerüchte und Encounter. Andere Runen ändern keine Geometrie.
-- Serien paralleler, einreihiger Gabeln mit 2–3 Nachfolgern und geraden Ketten dazwischen; disjunkte Korridore ohne Kantenkreuzungen. Alle Hauptwege treffen erst beim verpflichtenden Ebenenboss zusammen.
+- Ein unregelmäßiges Ebenenraster nach dem Grundprinzip von Slay the Spire: mindestens zwei Startoptionen, lokale Korridore, kreuzungsfreie Kanten sowie partielle Zusammenführungen, die sich später erneut teilen. Zusammenführungen liegen auseinander; der Boss sammelt am Ende alle verbleibenden Pfade ein.
 - Nebel nutzt Vorwärtsdistanz über Kanten. Bekanntes Wissen bleibt erhalten. Gerüchte zeigen einen besonderen Ort, aber keine versteckten Verbindungen oder Outcomes.
 - **Alle regulären Pfade zeigen** zeichnet die Topologie und neutrale unbekannte Orte, ohne Inhalte zu lernen. Geheime Knoten bleiben bis zur vorgesehenen Entdeckung vollständig verborgen.
 - **Nebel aus** lernt alle regulären Orte dauerhaft. **Debug: alles aufdecken** ist separat markiert und erweitert den gespeicherten Wissensstand nicht; nur Debug darf noch unentdeckte Geheimknoten vorzeitig darstellen.
-- Der Geheimarm existiert deterministisch von Anfang an. Im Filthworks verbraucht das Tor zwei Valve Seals; in Meadowland wird der Game Trail ohne Schlüssel geöffnet. Der jeweilige Unique Encounter gibt 25 zusätzliche Testbeute und der Arm führt zum selben Boss.
+- Der Geheimarm existiert deterministisch von Anfang an. Die beiden Valve Seals liegen seedabhängig auf verschiedenen Korridoren und Tiefen. An jeder Seal-Entscheidung stehen gleich gewichtete seltene oder besondere Alternativen; spätere Zusammenführungen halten den vollständigen Schlüsselpfad erreichbar. In Meadowland wird der Game Trail ohne Schlüssel geöffnet.
+- Begegnungswert: Basis 1, ungewöhnlich 2, selten oder speziell 3, Unique 4, Miniboss 5, Boss 6. Alle vollständigen regulären Pfade dürfen höchstens drei Wertpunkte auseinanderliegen.
+- Die Deckvorlage liefert Ausgangszahlen für Monster, Schreine, Sammel-, Event- und Wildkarten. Runen verändern diese Kartenbudgets vor dem Bau absolut. Prozentboni und Mali werden separat addiert und gelten anschließend global, etwa HP, Angriff und Leech für jedes Monster.
 - Level 1–2 enden mit einem Miniboss. Ab Level 3 bewachen Minibosse die Abstiege und ein Endboss die letzte Ebene. Energie und Inventar reisen mit; Wissen und Quests beginnen je Ebene neu.
 - Jede aktive Quest ist individuell lösbar. Alle Quests zusammen abschließen zu können ist bewusst keine Anforderung.
-- Effekte werden in Prozentpunkten addiert und auf −75 bis +200 % begrenzt. Monsterloot und Sammelertrag verändern einfache Erträge. Fragmentfunde vergeben zusätzliche Basisbeute 10 × Fragmentmultiplikator. Seltene Lootgewichte und Ködergewicht beeinflussen die Hunt-Chance. HP, Angriff und Heilwirkung werden angezeigt, aber es existiert kein echtes Kampfsystem.
+- Effekte werden in Prozentpunkten addiert und auf −75 bis +200 % begrenzt. Monsterloot und Sammelertrag verändern einfache Erträge. Fragmentfunde vergeben zusätzliche Basisbeute 10 × Fragmentmultiplikator. Seltene Begegnungen und Ködergewicht beeinflussen die Hunt-Chance. HP, Angriff, Leech und Heilwirkung werden angezeigt, aber es existiert kein echtes Kampfsystem.
 - Standardmäßig 12 gespeicherte Energie und 2 Köder. Alle Zahlen sind frei änderbare Prototypdaten, keine offiziellen Prado-Werte.
 
 ## Speichern und Import
 
-Der Browser speichert automatisch in `localStorage`. JSON-Exporte enthalten `schemaVersion`, `generatorVersion`, Konfiguration, aktuelle und abgeschlossene Ebenen, RunState und einen Aktionsverlauf. Auch ein offener Encounter oder Ebenenwechsel kann fortgesetzt werden. Ältere Stände bleiben unter ihren bisherigen Browser-Schlüsseln erhalten, können aber wegen der Deckprofile und neuen Topologie nicht in Version 3 importiert werden.
+Der Browser speichert automatisch in `localStorage`. JSON-Exporte enthalten `schemaVersion`, `generatorVersion`, Konfiguration, aktuelle und abgeschlossene Ebenen, RunState und einen Aktionsverlauf. Auch ein offener Encounter oder Ebenenwechsel kann fortgesetzt werden. Ältere Stände bleiben unter ihren bisherigen Browser-Schlüsseln erhalten, können aber wegen der neuen Kartenbudgets und Topologie nicht in Version 4 importiert werden.
 
 Importe werden als Daten geparst, niemals ausgeführt. Die Karte wird aus dem Seed neu berechnet und verglichen; der Aktionsverlauf wird durch die Zustandsmaschine erneut abgespielt. Unbekannte Versionen, inkonsistente Zustände, Kartenänderungen und illegale Aktionen werden abgelehnt. Limits: 5 MB und 10.000 Aktionen. Das ist Integritätsprüfung für lokale Teststände, kein Anti-Cheat-System.
 
@@ -78,8 +80,8 @@ npm run check
 ```
 
 - 11.200 Graphen: beide Deckprofile, alle 20 Runenkombinationen, Level 1–5, 20 Seeds, Einzelebenen- und Mehr­ebenenmodus sowie jede resultierende Ebene.
-- Invarianten: DAG, Erreichbarkeit, Pfadtiefe, exakte Budgets, maximal drei Nachfolger, separate Hauptwege bis zum Boss, verpflichtender Boss vor dem Ausgang, geometrische Kreuzungsfreiheit und getrennte Trefferflächen.
-- Individuelle Questlösbarkeit, Filthworks mit zwei gemeinsam erreichbaren Valve Seals, offener Meadowland-Geheimpfad, Umgehungen sowie knappe und künstlich unpassende Budgets.
+- Invarianten: DAG, Erreichbarkeit, Pfadtiefe, exakte Budgets, begrenzte Nachfolger, mindestens zwei Startwege, verpflichtender Boss vor dem Ausgang, geometrische Kreuzungsfreiheit und getrennte Trefferflächen.
+- Individuelle Questlösbarkeit, getrennte Valve Seals mit gleichwertigen Alternativen, lokales Merge/Split-Pathing, maximal drei Punkte Pfadwertspreizung, runenveränderte Kartenbudgets und globale Prozentmodifikatoren.
 - Vollständige Runs über alle regulären und geheimen Routen, Mini- und Endbossfolge, Ebenenwechsel mit Inventarübernahme, deterministisches Replay, Energiegrenzen, Doppelauslösung, Köderverbrauch und offene Encounter nach Reload.
 - Pfadansicht ohne Inhaltsleck, stufenweise Geheimwegentdeckung, Wissen und Gerüchte, reiner Debug-Reveal, versteckte Knoten ohne DOM-Interaktionsziel, JSON-Roundtrip und manipulierte Importe.
 - GitHub Actions führt Syntaxprüfung und Tests bei Push und Pull Request aus.

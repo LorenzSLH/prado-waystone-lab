@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generate, topology, budgets, questSolvable, reachable } from '../src/generation.js';
+import { generate, topology, budgets, runeBudgets, questSolvable, reachable } from '../src/generation.js';
 import { RUNES, LEVELS, DEFAULT_CONFIG, TYPES, effects, floorProfile } from '../src/config.js';
 import { DECK_IDS, deckFor } from '../src/decks.js';
 
@@ -9,7 +9,7 @@ for (let a = 0; a < 4; a++) for (let b = a + 1; b < 5; b++) for (let c = b + 1; 
 const signature = g => JSON.stringify({ nodes: g.nodes.map(({ id, depth, routeId, x, y, kind }) => ({ id, depth, routeId, x, y, kind })), edges: g.edges });
 
 test('11,200 graph matrix: both deck profiles, every rune set, level, 20 seeds, single/multi-floor and every floor', () => {
-  let graphs = 0, threeWayFork = false;
+  let graphs = 0, threeWayFork = false, mergeSplit = false;
   for (const deck of DECK_IDS) for (const runes of combinations) for (let level = 1; level <= 5; level++) for (let seed = 0; seed < 20; seed++) for (const descent of [false, true]) for (let floor = 1; floor <= floorProfile({ level, descent }).floors; floor++) {
     const config = { seed: `matrix-${seed}`, deck, runes, level, descent, floor }, g = generate(config);
     const label = JSON.stringify(config), p = floorProfile(config);
@@ -26,12 +26,13 @@ test('11,200 graph matrix: both deck profiles, every rune set, level, 20 seeds, 
     }
     assert.equal(g.routes.length, p.routes, label);
     for (const r of g.routes) {
-      const routeNodes = g.nodes.filter(n => n.routeId === r.id);
-      assert.ok(routeNodes.some(n => g.edges.filter(e => e.from === n.id).length >= 2), label);
-      threeWayFork ||= routeNodes.some(n => g.edges.filter(e => e.from === n.id).length === 3);
       const from = `${r.id}-2-0`, future = reachable(g, from);
-      assert.ok(g.quests.some(q => q.compatible && !future.has(q.target)), label);
       assert.ok([...future].some(id => g.nodes.find(n => n.id === id).kind === 'end'), label);
+    }
+    for (const n of g.nodes) {
+      const incoming = g.edges.filter(e => e.to === n.id).length, outgoing = g.edges.filter(e => e.from === n.id).length;
+      mergeSplit ||= incoming >= 2 && outgoing >= 2;
+      threeWayFork ||= outgoing >= 3;
     }
     for (const q of g.quests) { assert.equal(q.compatible, true, label); assert.equal(questSolvable(g, q), true, label); }
     assert.equal(g.nodes.find(n => n.id === 'boss').special, p.finalBoss ? 'boss' : 'miniboss', label);
@@ -43,7 +44,7 @@ test('11,200 graph matrix: both deck profiles, every rune set, level, 20 seeds, 
     for (const n of g.nodes) for (const other of g.nodes) if (n.id !== other.id && n.depth === other.depth) assert.ok(Math.abs(n.x - other.x) >= 70, `Touch targets overlap: ${label}`);
     graphs++;
   }
-  assert.equal(graphs, 11200); assert.ok(threeWayFork);
+  assert.equal(graphs, 11200); assert.ok(threeWayFork); assert.ok(mergeSplit);
 });
 
 test('determinism, normalized rune order, independent topology stream', () => {
@@ -71,21 +72,35 @@ test('official Waystone deck content powers distinct dungeon and wilderness stor
   }
   assert.deepEqual(deckFor('filthworks').composition, { monster: 4, event: 1, rest: 1, wild: 1 });
 });
-test('largest remainder exact counts, zero weight, stable tie break', () => {
-  assert.deepEqual(budgets(3, { M: 1, F: 1, H: 1, E: 1 }), { E: 1, F: 1, H: 1, M: 0 });
-  assert.deepEqual(budgets(100, { M: 0, F: 0, H: 1, E: 0 }), { E: 0, F: 0, H: 100, M: 0 });
-  assert.throws(() => budgets(10, { M: 0, F: 0, H: 0, E: 0 }));
-  assert.throws(() => budgets(10, { M: -1, F: 0, H: 1, E: 0 }));
+test('fragment choices span lanes and depths, remain collectible, and match valuable alternatives', () => {
+  for (let seed = 0; seed < 100; seed++) {
+    const g = generate({ ...DEFAULT_CONFIG, seed: `tradeoff-${seed}`, level: 5, descent: false });
+    const resources = g.plan.resources.map(item => g.nodes.find(n => n.id === item.id));
+    assert.equal(new Set(resources.map(n => n.routeId)).size, resources.length);
+    assert.ok(resources[1].depth - resources[0].depth >= 2);
+    for (const item of g.plan.resources) {
+      const options = [item.id, ...item.choiceIds].map(id => g.nodes.find(n => n.id === id));
+      assert.deepEqual(new Set(options.map(n => n.decisionWeight)), new Set([3]));
+      assert.ok(options.slice(1).every(n => n.special === 'choice'));
+    }
+    assert.equal(questSolvable(g, g.quests.find(q => q.id === 'gate')), true);
+    assert.ok(g.plan.junctionDepths.length >= 2);
+  }
 });
-test('incompatible feature is marked, never inserted into a zero budget', () => {
-  // No real three-rune combination has zero H or E, so inject catalog weights only in this scoped fixture.
-  const prior = RUNES.slice(0, 3).map(r => ({ ...r.encounterUnits }));
-  try {
-    RUNES.slice(0, 3).forEach(r => { r.encounterUnits = { M: 8, F: 0, H: 0, E: 0 }; });
-    const g = generate(DEFAULT_CONFIG);
-    assert.ok(g.quests.every(q => !q.compatible));
-    assert.equal(g.nodes.filter(n => n.type && n.type !== 'M').length, 0);
-  } finally { RUNES.slice(0, 3).forEach((r, i) => { r.encounterUnits = prior[i]; }); }
+test('largest remainder exact counts, zero weight, stable tie break', () => {
+  assert.deepEqual(budgets(4, { M: 1, F: 1, W: 1, S: 1, E: 1 }), { E: 1, F: 1, M: 1, S: 1, W: 0 });
+  assert.deepEqual(budgets(100, { M: 0, F: 0, W: 1, S: 0, E: 0 }), { E: 0, F: 0, M: 0, S: 0, W: 100 });
+  assert.throws(() => budgets(10, { M: 0, F: 0, W: 0, S: 0, E: 0 }));
+  assert.throws(() => budgets(10, { M: -1, F: 0, W: 1, S: 0, E: 0 }));
+});
+test('runes modify deck defaults while every core card group stays available', () => {
+  const base = generate(DEFAULT_CONFIG), aggressive = generate({ ...DEFAULT_CONFIG, runes: ['blood', 'hunt', 'trail'] });
+  assert.ok(TYPES.every(type => base.weights[type] >= 1 && aggressive.weights[type] >= 1));
+  assert.notDeepEqual(base.counts, aggressive.counts);
+  assert.ok(aggressive.counts.M >= base.counts.M);
+  assert.ok(aggressive.quests.every(q => q.compatible));
+  const exact = runeBudgets(80, deckFor('filthworks').defaultUnits, ['blood', 'hunt', 'trail']);
+  for (const type of TYPES) assert.equal(exact.counts[type], exact.base[type] + exact.deltas[type]);
 });
 test('config validation and additive effects', () => {
   for (const bad of [{ seed: '' }, { seed: ' '.repeat(10) }, { seed: 'x'.repeat(81) }, { level: 0 }, { level: 1.5 }, { level: 6 }, { deck: 'unknown' }, { runes: ['hunt', 'hunt', 'ruin'] }, { runes: ['none', 'wild', 'ruin'] }, { descent: 'yes' }, { floor: 2 }]) assert.throws(() => generate({ ...DEFAULT_CONFIG, ...bad }));

@@ -1,10 +1,10 @@
 # Prüfprotokoll
 
-Stand: 21. September 2026 · Generator 3.0.0 · Node.js 24.19.0
+Stand: 21. September 2026 · Generator 4.0.0 · Node.js 24.19.0
 
 ## Automatisiert
 
-`node --test`: 19 Tests erfolgreich, einschließlich einer Matrix aus **11.200 Karten**. Beide Deckprofile, alle 20 Dreierkombinationen des Runenkatalogs, Level 1–5, Seeds `matrix-0` bis `matrix-19`, jeweils Einzelebenen- und Mehr­ebenenmodus sowie jede resultierende Ebene.
+`node --test`: 20 Tests erfolgreich, einschließlich einer Matrix aus **11.200 Karten**. Beide Deckprofile, alle 20 Dreierkombinationen des Runenkatalogs, Level 1–5, Seeds `matrix-0` bis `matrix-19`, jeweils Einzelebenen- und Mehr­ebenenmodus sowie jede resultierende Ebene.
 
 Vollständige Modell-Runs über alle Hauptwege und beide Varianten des Geheimarms geprüft. Jeder Weg passiert denselben verpflichtenden Ebenenboss. Im Filthworks öffnen zwei Valve Seals das Sluice Gate; in Meadowland wird der Game Trail ohne Schlüssel zugänglich. Mehrere Ebenen, Mini- und Endboss, Inventarübernahme, Reset und deterministisches Replay sind geprüft.
 
@@ -25,3 +25,5 @@ Mit Chrome 153 headless geprüft:
 Die automatisierten Modelltests decken ergänzend Reload bei offenem Encounter, Export/Import, Reset, reguläre Alternativrouten, Mehr­ebenen-Replay und nicht garantierte Köderergebnisse ab. Tastaturaktionen werden in der Kartenimplementierung und Markupprüfung berücksichtigt; ein vollständiger manueller Screenreader-Test ist noch nicht erfolgt.
 
 Geometrische Kreuzungsfreiheit, mindestens 70 SVG-Einheiten Abstand der Trefferflächen, Inhaltsfreiheit unbekannter Pfadknoten und die Abwesenheit interaktiver Geheimknoten vor ihrer Entdeckung werden bereits ohne Browser geprüft. Die minimale SVG-Skalierung ergibt mindestens 44 CSS-Pixel große Knoten-Trefferflächen.
+
+Version 4 prüft zusätzlich partielle Zusammenführungen mit späterer Aufteilung, räumlich getrennte Schlüsselressourcen, gleich gewichtete Alternativen, höchstens drei Wertpunkte Unterschied zwischen vollständigen regulären Pfaden sowie absolute Runenänderungen an fünf Kartenbudgets.

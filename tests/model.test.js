@@ -7,12 +7,28 @@ import { renderMap } from '../src/map.js';
 const make = (overrides = {}) => newSession({ ...DEFAULT_CONFIG, ...overrides });
 const view = (s, changes) => dispatch(s, { type: 'view', view: { ...s.state.view, ...changes } });
 function move(s, id, bait = false) { s = dispatch(s, { type: 'enter', id }); if (s.state.status === 'encounter') s = dispatch(s, { type: 'resolve', bait }); return s; }
+function pathTo(graph, from, target) {
+  const queue = [[from]], seen = new Set([from]);
+  for (const path of queue) for (const e of graph.edges.filter(edge => edge.from === path.at(-1))) {
+    if (seen.has(e.to)) continue;
+    const next = [...path, e.to]; if (e.to === target) return next;
+    seen.add(e.to); queue.push(next);
+  }
+  throw Error(`No path from ${from} to ${target}`);
+}
+function travel(s, target) { for (const id of pathTo(s.graph, s.state.currentNodeId, target).slice(1)) s = move(s, id, false); return s; }
 function walk(s, route, gate = false) {
   s = view(s, { infinite: true });
+  if (gate) {
+    for (const item of s.graph.plan.resources) s = travel(s, item.id);
+    s = travel(s, s.graph.plan.discoveryId);
+    s = travel(s, s.graph.plan.gateId);
+    s = travel(s, 'secret-cache');
+  }
   while (!['finished', 'floor-cleared'].includes(s.state.status)) {
     const options = s.graph.edges.filter(e => e.from === s.state.currentNodeId).map(e => getNode(s.graph, e.to));
     const next = options.find(n => (!n.routeId || n.routeId === route) && (gate || n.special !== 'gate'));
-    s = move(s, next.id, next.type === 'H' && s.state.inventory.bait > 0);
+    s = move(s, next.id, next.type === 'W' && s.state.inventory.bait > 0);
   }
   return s;
 }
@@ -48,22 +64,23 @@ test('two full runs on different routes, gate resources, same-seed replay and im
   assert.deepEqual(other.graph, first.graph);
 });
 test('locked gate has an open bypass; two compatible fragments unlock it and cost once', () => {
-  let s = move(move(make(), 'entry'), 'r1-2-0');
-  s = move(s, 'r1-3-0'); s = move(s, 'r1-4-0'); s = move(s, 'r1-5-0');
+  let s = make();
+  for (const item of s.graph.plan.resources) s = travel(s, item.id);
+  s = travel(s, s.graph.plan.discoveryId);
   const gate = s.graph.quests.find(q => q.id === 'gate').target;
   assert.equal(s.state.inventory.fragments, 2);
   const missing = structuredClone(s); missing.state.inventory.fragments = 1;
   assert.equal(accessibility(missing.graph, missing.state, gate), 'locked');
   assert.throws(() => dispatch(missing, { type: 'enter', id: gate }));
-  assert.equal(accessibility(missing.graph, missing.state, 'r1-6-1'), 'next');
+  const bypass = s.graph.edges.filter(e => e.from === s.state.currentNodeId).map(e => getNode(s.graph, e.to)).find(n => n.special !== 'gate');
+  assert.equal(accessibility(missing.graph, missing.state, bypass.id), 'next');
   s = dispatch(s, { type: 'enter', id: gate });
   assert.equal(s.state.inventory.fragments, 0);
   assert.throws(() => dispatch(s, { type: 'enter', id: gate }));
 });
 test('Meadowland reveals an open game trail and its unique reliquary', () => {
   let s = make({ deck: 'meadowland' });
-  s = move(s, 'entry');
-  for (let d = 2; d <= 5; d++) s = move(s, `r1-${d}-0`);
+  s = travel(s, s.graph.plan.discoveryId);
   const gate = s.graph.quests.find(q => q.id === 'gate').target;
   assert.equal(s.graph.nodes.filter(n => n.special === 'fragment').length, 0);
   assert.equal(accessibility(s.graph, s.state, gate), 'next');
@@ -86,7 +103,7 @@ test('graph-distance fog, rumors disclose no connecting edges, known missed rumo
     assert.equal(visibility(fresh.graph, fresh.state, id), 'rumor');
     assert.ok(fresh.graph.edges.filter(e => e.from === id || e.to === id).every(e => !fresh.state.knownEdges.includes(e.id)));
   }
-  s = move(move(fresh, 'entry'), 'r1-2-0');
+  s = travel(fresh, 'r1-7-0');
   const rumor = s.graph.quests.find(q => q.id === 'hunt').target;
   assert.equal(accessibility(s.graph, s.state, rumor), 'missed');
   assert.equal(visibility(s.graph, s.state, rumor), 'rumor');
@@ -110,8 +127,7 @@ test('bait consumed once, chance increased but never guaranteed, deterministic o
   let unique = 0, normal = 0;
   for (let i = 0; i < 40; i++) {
     let s = view(make({ seed: `bait-${i}` }), { infinite: true });
-    s = move(s, 'entry');
-    for (let d = 2; d <= 6; d++) s = move(s, `r0-${d}-0`);
+    s = travel(s, 'r0-6-0');
     s = dispatch(s, { type: 'enter', id: 'r0-7-0' });
     const before = s.state.inventory.bait;
     const done = dispatch(s, { type: 'resolve', bait: true });
@@ -127,12 +143,12 @@ test('bait consumed once, chance increased but never guaranteed, deterministic o
 });
 test('energy limit blocks entry; refill and explicit infinite mode work', () => {
   let s = make({ level: 5, descent: false });
-  s = move(s, 'entry');
-  for (let d = 2; d <= 12; d++) s = move(s, `r0-${d}-0`);
+  s = travel(s, s.graph.nodes.find(n => n.depth === 12 && !n.secret).id);
   assert.equal(s.state.energy, 0);
-  assert.throws(() => dispatch(s, { type: 'enter', id: 'r0-13-0' }));
+  const nextId = s.graph.edges.find(e => e.from === s.state.currentNodeId).to;
+  assert.throws(() => dispatch(s, { type: 'enter', id: nextId }));
   s = dispatch(s, { type: 'energy' }); assert.equal(s.state.energy, 20);
-  s = view(s, { infinite: true }); s = move(s, 'r0-13-0'); assert.equal(s.state.energy, 20);
+  s = view(s, { infinite: true }); s = move(s, nextId); assert.equal(s.state.energy, 20);
 });
 test('reject invalid JSON, oversized, incompatible versions, graph tampering and incoherent state', () => {
   for (const value of ['', 'null', '{bad}', '{}', '[]', 'x'.repeat(5_000_001)]) assert.throws(() => importSession(value));

@@ -1,20 +1,20 @@
 import { DECK_IDS } from './decks.js';
 
-export const GENERATOR_VERSION = '3.0.0';
-export const SCHEMA_VERSION = 3;
+export const GENERATOR_VERSION = '4.0.0';
+export const SCHEMA_VERSION = 4;
 export const BOSS_FROM_LEVEL = 3;
-export const TYPES = ['E', 'F', 'H', 'M'];
-export const TYPE_NAMES = { M: 'Monster', F: 'Sammeln', H: 'Hunt', E: 'Ereignis' };
+export const TYPES = ['E', 'F', 'M', 'S', 'W'];
+export const TYPE_NAMES = { M: 'Monster', S: 'Schrein', F: 'Sammelkarte', E: 'Eventkarte', W: 'Wildkarte' };
 export const LEVELS = [null, { depth: 8, preview: 1, routes: 2 }, { depth: 12, preview: 2, routes: 2 }, { depth: 16, preview: 3, routes: 3 }, { depth: 20, preview: 4, routes: 3 }, { depth: 24, preview: 5, routes: 3 }];
 export const RUNES = [
-  { id: 'hunt', name: 'Jagd', icon: 'hunt', flavor: 'Folge dem Ruf der Wildnis.', encounterUnits: { M: 4, F: 0, H: 3, E: 1 }, difficultyMods: { hp: 15 }, rewardMods: { loot: 10 }, typeBias: 'H' },
-  { id: 'wild', name: 'Wildnis', icon: 'forage', flavor: 'Was wächst, weist dir den Weg.', encounterUnits: { M: 1, F: 5, H: 1, E: 1 }, difficultyMods: { attack: 10 }, rewardMods: { forage: 20 }, typeBias: 'F' },
-  { id: 'ruin', name: 'Ruine', icon: 'gate', flavor: 'Alte Steine erinnern sich.', encounterUnits: { M: 3, F: 1, H: 1, E: 3 }, difficultyMods: { heal: -15 }, rewardMods: { fragment: 15 }, typeBias: 'E' },
-  { id: 'blood', name: 'Blutmond', icon: 'monster', flavor: 'Ein roter Mond. Reiche Beute.', encounterUnits: { M: 5, F: 0, H: 2, E: 1 }, difficultyMods: { attack: 20 }, rewardMods: { rare: 15 }, typeBias: 'M' },
-  { id: 'haven', name: 'Zuflucht', icon: 'camp', flavor: 'Ein Feuer gegen die Dunkelheit.', encounterUnits: { M: 2, F: 3, H: 0, E: 3 }, difficultyMods: { hp: 10 }, rewardMods: { heal: 20 }, typeBias: 'E' },
-  { id: 'trail', name: 'Fährte', icon: 'trail', flavor: 'Jede Spur erzählt eine Geschichte.', encounterUnits: { M: 2, F: 2, H: 3, E: 1 }, difficultyMods: { hp: 10 }, rewardMods: { bait: 20 }, typeBias: 'H' },
+  { id: 'hunt', name: 'Jagd', icon: 'hunt', flavor: 'Mehr Wildkarten und Monster, weniger sichere Orte.', cardDeltas: { M: 1, S: -1, F: -1, E: -1, W: 2 }, difficultyMods: { hp: 15 }, rewardMods: { loot: 10 }, typeBias: 'W' },
+  { id: 'wild', name: 'Wildnis', icon: 'forage', flavor: 'Mehr Sammel- und Wildkarten.', cardDeltas: { M: -1, S: -1, F: 2, E: -1, W: 1 }, difficultyMods: { attack: 10 }, rewardMods: { forage: 20 }, typeBias: 'F' },
+  { id: 'ruin', name: 'Ruine', icon: 'gate', flavor: 'Mehr Schreine und Events, schwächere Heilung.', cardDeltas: { M: -1, S: 2, F: -1, E: 1, W: -1 }, difficultyMods: { heal: -15 }, rewardMods: { fragment: 15 }, typeBias: 'S' },
+  { id: 'blood', name: 'Blutmond', icon: 'monster', flavor: 'Mehr Monster und Wildkarten mit gefährlicheren Gegnern.', cardDeltas: { M: 2, S: -1, F: -1, E: -1, W: 1 }, difficultyMods: { attack: 20, leech: 15 }, rewardMods: { rare: 15 }, typeBias: 'M' },
+  { id: 'haven', name: 'Zuflucht', icon: 'camp', flavor: 'Mehr Events und Schreine, weniger Monster.', cardDeltas: { M: -1, S: 1, F: -1, E: 2, W: -1 }, difficultyMods: { hp: 10 }, rewardMods: { heal: 20 }, typeBias: 'E' },
+  { id: 'trail', name: 'Fährte', icon: 'trail', flavor: 'Mehr Wild- und Sammelkarten.', cardDeltas: { M: -1, S: -1, F: 1, E: -1, W: 2 }, difficultyMods: { hp: 10 }, rewardMods: { bait: 20 }, typeBias: 'W' },
 ];
-export const MOD_NAMES = { hp: 'Monster-HP', attack: 'Monsterangriff', heal: 'Heilwirkung', loot: 'Monsterloot', forage: 'Sammelertrag', fragment: 'Fragment-Bonusloot', rare: 'Seltene Lootgewichte', bait: 'Ködergewicht' };
+export const MOD_NAMES = { hp: 'Monster-HP', attack: 'Monsterangriff', leech: 'Monster-Leech', heal: 'Heilwirkung', loot: 'Monsterloot', forage: 'Sammelertrag', fragment: 'Fragment-Bonusloot', rare: 'Seltene Begegnungen', bait: 'Ködergewicht' };
 export const DEFAULT_CONFIG = { seed: 'MOOSPFAD-42', level: 1, deck: 'filthworks', runes: ['hunt', 'wild', 'ruin'], descent: true, floor: 1 };
 export const DEFAULT_VIEW = { fog: 'rumors', paths: true, preview: 0, rumorCount: 3, debug: false, infinite: false };
 export function floorProfile(config) {

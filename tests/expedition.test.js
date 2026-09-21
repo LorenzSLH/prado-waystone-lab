@@ -9,7 +9,23 @@ function move(s, id) {
   s = dispatch(s, { type: 'enter', id });
   return s.state.status === 'encounter' ? dispatch(s, { type: 'resolve', bait: false }) : s;
 }
+function pathTo(graph, from, target) {
+  const queue = [[from]], seen = new Set([from]);
+  for (const path of queue) for (const e of graph.edges.filter(edge => edge.from === path.at(-1))) {
+    if (seen.has(e.to)) continue;
+    const next = [...path, e.to]; if (e.to === target) return next;
+    seen.add(e.to); queue.push(next);
+  }
+  throw Error(`No path from ${from} to ${target}`);
+}
+function travel(s, target) { for (const id of pathTo(s.graph, s.state.currentNodeId, target).slice(1)) s = move(s, id); return s; }
 function finishFloor(s, route = 'r0', secret = false) {
+  if (secret) {
+    for (const item of s.graph.plan.resources) s = travel(s, item.id);
+    s = travel(s, s.graph.plan.discoveryId);
+    s = travel(s, s.graph.plan.gateId);
+    s = travel(s, 'secret-cache');
+  }
   while (!['finished', 'floor-cleared'].includes(s.state.status)) {
     const options = s.graph.edges.filter(e => e.from === s.state.currentNodeId).map(e => getNode(s.graph, e.to));
     const next = options.find(n => (!n.routeId || n.routeId === route) && (secret || !n.secret));
@@ -53,8 +69,8 @@ test('secret entrance appears locally, passage only after gate completion; neith
       assert.equal(visibility(s.graph, s.state, 'secret-cache'), 'hidden');
     }
   }
-  s = move(s, 'entry');
-  for (let d = 2; d <= 5; d++) s = move(s, `r1-${d}-0`);
+  for (const item of s.graph.plan.resources) s = travel(s, item.id);
+  s = travel(s, s.graph.plan.discoveryId);
   assert.ok(s.state.discoveredSecrets.includes('entrance'));
   assert.equal(visibility(s.graph, s.state, gate), 'revealed');
   assert.equal(visibility(s.graph, s.state, 'secret-cache'), 'hidden');

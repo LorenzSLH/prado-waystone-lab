@@ -80,14 +80,14 @@ export function transition(graph, original, action) {
     case 'resolve': {
       if (s.status !== 'encounter' || s.resolvedEncounters[current.id]) throw Error('Diese Begegnung ist bereits abgeschlossen.');
       if (typeof action.bait !== 'boolean') throw Error('Köderwahl ist ungültig.');
-      if (action.bait && (current.type !== 'H' || s.inventory.bait < 1)) throw Error('Kein passender Köder verfügbar.');
+      if (action.bait && (current.type !== 'W' || s.inventory.bait < 1)) throw Error('Kein passender Köder verfügbar.');
       if (action.bait) s.inventory.bait--;
       const mods = graph.effects, out = current.outcome;
       const fragmentBonus = current.special === 'fragment' ? Math.round(10 * mods.fragment.multiplier) : 0;
       const specialBonus = current.special === 'treasure' ? 25 : current.special === 'boss' ? 40 : current.special === 'miniboss' ? 15 : 0;
       const loot = Math.round(out.loot * (current.type === 'M' ? mods.loot.multiplier : 1)) + fragmentBonus + specialBonus;
       const herbs = current.type === 'F' ? Math.max(1, Math.round(out.herbs * mods.forage.multiplier)) : 0;
-      const unique = current.type === 'H' && out.roll < huntChance(graph, action.bait);
+      const unique = current.type === 'W' && out.roll < huntChance(graph, action.bait);
       s.inventory.loot += loot; s.inventory.herbs += herbs; s.inventory.uniques += unique ? 1 : 0;
       if (current.special === 'fragment') s.inventory.fragments++;
       s.resolvedEncounters[current.id] = { loot, herbs, unique, bait: action.bait, fragment: current.special === 'fragment', fragmentBonus };

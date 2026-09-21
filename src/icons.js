@@ -20,4 +20,4 @@ export const paths = {
 export function icon(name, cls = '', size = 24) {
   return `<svg class="icon ${cls}" width="${size}" height="${size}" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.event}</svg>`;
 }
-export function nodeIcon(n) { return n.kind === 'start' ? 'waystone' : n.special === 'descent' ? 'gate' : n.kind === 'end' ? 'end' : n.special === 'gate' && n.secretKind === 'trail' ? 'trail' : ['fragment', 'gate', 'boss', 'miniboss', 'treasure'].includes(n.special) ? n.special : ({ M: 'monster', F: 'forage', H: 'hunt', E: 'event' }[n.type]); }
+export function nodeIcon(n) { return n.kind === 'start' ? 'waystone' : n.special === 'descent' ? 'gate' : n.kind === 'end' ? 'end' : n.special === 'gate' && n.secretKind === 'trail' ? 'trail' : ['fragment', 'gate', 'boss', 'miniboss', 'treasure'].includes(n.special) ? n.special : ({ M: 'monster', F: 'forage', W: 'hunt', S: 'waystone', E: 'event' }[n.type]); }

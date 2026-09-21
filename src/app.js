@@ -5,13 +5,14 @@ import { icon, nodeIcon } from './icons.js';
 import { renderMap, landscape, escape } from './map.js';
 import { DECKS, deckFor } from './decks.js';
 
-const STORAGE = 'prado.waystone.v3', app = document.querySelector('#app');
+const STORAGE = 'prado.waystone.v4', app = document.querySelector('#app');
 let session, notice = '', selected, mobileConfig = false, inspectorOpen = false, diagnosticOpen = false, importOpen = false, bait = false;
 try { const saved = localStorage.getItem(STORAGE); session = saved ? importSession(saved) : newSession(DEFAULT_CONFIG); }
 catch (e) { session = newSession(DEFAULT_CONFIG); notice = `Gespeicherter Run konnte nicht geladen werden: ${e.message}`; }
 let draft = structuredClone(session.config);
 selected = session.state.currentNodeId;
 const percent = n => `${n > 0 ? '+' : ''}${n} %`;
+const runeBudget = rune => TYPES.map(type => `${rune.cardDeltas[type] > 0 ? '+' : ''}${rune.cardDeltas[type]} ${TYPE_NAMES[type]}`).join(' · ');
 function save() { try { localStorage.setItem(STORAGE, JSON.stringify(session)); } catch { notice = 'Lokales Speichern ist nicht verfügbar. Sichere deinen Run per JSON-Export.'; } }
 function act(action) {
   try { session = dispatch(session, action); notice = ''; save(); }
@@ -19,7 +20,9 @@ function act(action) {
   render();
 }
 function effectsMarkup(g) {
-  return Object.entries(g.effects).filter(([, v]) => v.percent).map(([k, v]) => `<div class="effect"><span>${escape(MOD_NAMES[k])}</span><strong class="${['hp', 'attack'].includes(k) || v.percent < 0 ? 'malus' : ''}">${percent(v.percent)} <small>×${v.multiplier.toFixed(2)}</small></strong></div>`).join('');
+  const cards = g.config.runes.map(id => RUNES.find(rune => rune.id === id)).map(rune => `<div class="rune-budget-effect"><span>${escape(rune.name)}</span><small>${escape(runeBudget(rune))}</small></div>`).join('');
+  const percentages = Object.entries(g.effects).filter(([, v]) => v.percent).map(([k, v]) => `<div class="effect"><span>${escape(MOD_NAMES[k])}</span><strong class="${['hp', 'attack', 'leech'].includes(k) || v.percent < 0 ? 'malus' : ''}">${percent(v.percent)} <small>×${v.multiplier.toFixed(2)}</small></strong></div>`).join('');
+  return `<p class="effect-heading">ABSOLUTE KARTEN</p>${cards}<p class="effect-heading">GLOBALE PROZENTWERTE</p>${percentages}`;
 }
 function configuration() {
   let preview, error = '';
@@ -35,7 +38,7 @@ function configuration() {
     <div class="deck-picker">${Object.values(DECKS).map(d => `<button class="deck-option ${draft.deck === d.slug ? 'chosen' : ''}" data-deck="${d.slug}" aria-pressed="${draft.deck === d.slug}"><span>${icon(d.style === 'dungeon' ? 'gate' : 'trail', '', 22)}<b>${escape(d.name)}</b></span><small>${d.style === 'dungeon' ? 'Dungeon' : 'Wildnis'} · ${escape(d.location)}</small></button>`).join('')}</div>
     <div class="deck-reference"><strong>${escape(deck.name)}</strong><span>${escape(deck.zone)} · empfohlenes Decklevel ${deck.suggestedLevel}</span><p>${escape(deck.description)}</p><small>${deck.recipe.map(escape).join(' / ')}<br>${deck.composition.monster} Monster · ${deck.composition.event} Event · ${deck.composition.rest} Rest · ${deck.composition.wild} Wild</small><a href="${deck.sourceUrl}" target="_blank" rel="noreferrer">Offizielles Deck ansehen ↗</a></div>
     <div class="section-label">RUNEN WÄHLEN <span>${draft.runes.length} / 3</span></div>
-    <div class="rune-grid">${RUNES.map(r => `<button class="rune ${draft.runes.includes(r.id) ? 'chosen' : ''}" data-rune="${r.id}" aria-pressed="${draft.runes.includes(r.id)}" title="${escape(r.flavor)}">${icon(r.icon, '', 28)}<span>${r.name}</span><i>${draft.runes.includes(r.id) ? '✓' : '+'}</i></button>`).join('')}</div>
+    <div class="rune-grid">${RUNES.map(r => `<button class="rune ${draft.runes.includes(r.id) ? 'chosen' : ''}" data-rune="${r.id}" aria-pressed="${draft.runes.includes(r.id)}" title="${escape(`${r.flavor} Karten: ${runeBudget(r)}.`)}">${icon(r.icon, '', 28)}<span>${r.name}</span><i>${draft.runes.includes(r.id) ? '✓' : '+'}</i></button>`).join('')}</div>
     <div class="level-row"><label for="level">Abenteuerlevel</label><strong id="level-value">${draft.level} <span>/ 5</span></strong></div>
     <input id="level" type="range" min="1" max="5" value="${draft.level}" aria-label="Abenteuerlevel">
     <div class="range-caption"><span>Kurzer Ausflug</span><span>Lange Reise</span></div>
@@ -48,7 +51,7 @@ function configuration() {
     <div class="config-stats"><div class="section-label">${changed ? 'VORSCHAU' : 'DEINE WELT'} <span>${total} ORTE</span></div>
       <div class="budget-bar">${TYPES.map(t => `<span class="budget-${t}" style="width:${preview.counts[t] / total * 100}%"></span>`).join('')}</div>
       <div class="budget-list">${TYPES.map(t => `<div><i class="dot budget-${t}"></i><span>${TYPE_NAMES[t]}</span><strong>${preview.counts[t]}</strong><small>${Math.round(preview.counts[t] / total * 100)} %</small></div>`).join('')}</div>
-      <p class="micro">Gesamte erste Ebene inklusive Geheimorten und Boss; dein Weg enthält nur einen Teil.</p>
+      <p class="micro">Runen verändern die absoluten Deckzahlen oben. Prozentwerte unten gelten global. Gesamte erste Ebene inklusive Geheimorten und Boss; dein Weg enthält nur einen Teil. Begegnungswert: Basis 1 · selten/speziell 3 · Unique 4 · Boss 5–6. Reguläre Pfade: ${preview.weightProfile.pathMin}–${preview.weightProfile.pathMax}.</p>
       <details class="effects"><summary>Runeneffekte <span>＋</span></summary>${effectsMarkup(preview)}<p class="micro">Prototypwerte. Mods addieren sich, Grenzen −75 bis +200 %. HP/Angriff nur simuliert; kein Kampfsystem.</p></details>
     </div>
     <div class="config-footer">${icon('compass', '', 18)} Jeder Weg ist auch ein Verzicht.</div>
@@ -70,18 +73,18 @@ function inspector() {
   const reward = s.resolvedEncounters[node.id], encounter = a === 'current' && s.status === 'encounter';
   const secret = g.deck.secret, lockCost = node.lockCost ?? secret.lockCost;
   const type = node.special === 'boss' ? 'ENDBOSS' : node.special === 'miniboss' ? 'MINIBOSS' : node.special === 'descent' ? 'NÄCHSTE EBENE' : node.kind === 'start' ? 'DER ANFANG' : node.kind === 'end' ? 'ABSCHLUSS' : TYPE_NAMES[node.type].toUpperCase();
-  const descriptions = { start: 'Ein warmer Stein in deiner Hand. Drei Runen leuchten auf. Hinter dem Nebel warten Wege, die nur du wählen kannst.', M: 'Etwas bewegt sich zwischen den Bäumen. Stell dich der Begegnung und sammle deine Beute.', F: 'Im Schatten alter Bäume wächst, was du auf deiner Reise brauchen wirst.', H: 'Frische Spuren führen tiefer in die Wildnis. Vielleicht wartet hier eine seltene Begegnung.', E: 'An diesem Ort hat die Zeit eine Geschichte zurückgelassen. Finde heraus, was sie dir erzählt.', end: 'Du hast deinen Horizont erreicht. Nicht jeder Weg wurde gegangen – und genau das macht diese Reise zu deiner.' };
+  const descriptions = { start: 'Ein warmer Stein in deiner Hand. Drei Runen leuchten auf. Hinter dem Nebel warten Wege, die nur du wählen kannst.', M: 'Etwas bewegt sich im nächsten Korridor. Stell dich der Begegnung und sammle deine Beute.', S: 'Ein Schrein bietet eine seltene Entscheidung.', F: 'Hier wächst, was du auf deiner Reise brauchen wirst.', W: 'Frische Spuren weisen auf eine Wildbegegnung hin.', E: 'An diesem Ort hat die Zeit eine Geschichte zurückgelassen.', end: 'Du hast deinen Horizont erreicht. Nicht jeder Weg wurde gegangen – und genau das macht diese Reise zu deiner.' };
   const specialDescriptions = { boss: 'Alle Wege führen hierher. Tief unter den Wurzeln wartet der wahre Herr dieses Abenteuers. Besiege ihn, um deine Reise abzuschließen.', miniboss: 'Der Wächter versperrt den Ausgang dieser Ebene. Jeder reguläre und geheime Weg führt zu dieser Begegnung.', gate: 'Hinter dem entdeckten Tor liegt ein geheimer Seitenarm. Zwei Fragmente öffnen ihn. Der reguläre Weg führt ebenfalls zum Ebenenboss.', treasure: 'Ein verborgener Vorrat belohnt deine Entdeckung mit 25 zusätzlicher Beute. Von hier führt der Weg weiter zum selben Ebenenboss.', descent: 'Der Wächter ist besiegt. Dieses Tor führt tiefer hinab. Deine Energie und dein Reisebeutel begleiten dich auf die nächste Ebene.' };
   const statuses = { current: 'Du bist hier', next: 'Direkt erreichbar', future: 'Liegt noch vor dir', missed: 'Auf dieser Route nicht mehr erreichbar', locked: `Gesperrt · ${lockCost} ${secret.resourceLabel} nötig`, visited: 'Bereits besucht', undiscovered: 'Debug · noch nicht entdeckt' };
   return `<aside class="inspector ${inspectorOpen ? 'sheet-open' : ''}" aria-label="Knotendetails">
     <div class="inspector-top"><div class="section-eyebrow">WEGGEFÄHRTE <span>03</span></div><button class="sheet-close" id="close-sheet" aria-label="Details schließen">×</button></div>
     <div class="place-art ${node.special || node.kind}">${landscape()}<div class="place-emblem">${icon(nodeIcon(node), '', 44)}</div><span>${rumor ? '✧ GERÜCHT' : type}</span></div>
-    <div class="place-body"><span class="location-tag ${a}"><i></i>${statuses[a]}</span><h2>${escape(node.name)}</h2>
+    <div class="place-body"><span class="location-tag ${a}"><i></i>${statuses[a]}</span>${node.decisionWeight ? `<span class="encounter-weight">ENTSCHEIDUNGSWERT <b>${node.decisionWeight}</b></span>` : ''}<h2>${escape(node.name)}</h2>
     <p class="place-description">${rumor ? 'Reisende erzählen von diesem Ort. Seine Begegnung ist noch unbekannt. Du kannst ihn nur über verbundene Orte erreichen.' : escape(node.description || specialDescriptions[node.special] || descriptions[node.kind] || descriptions[node.type])}</p>
     ${node.special === 'gate' && lockCost ? `<div class="requirement">${icon('fragment')} <span>${escape(node.name)}<strong>${s.inventory.fragments} / ${lockCost} ${escape(secret.resourceLabel)} ${reward ? '· geöffnet' : ''}</strong></span></div>` : ''}
     ${!rumor && node.special === 'fragment' ? `<p class="micro">Garantierter Fund: 1 ${escape(secret.resourceLabel)}. Alle Teile liegen vor dem Tor auf dieser Route.</p>` : ''}
-    ${encounter && node.type === 'H' ? `<label class="bait-control"><input type="checkbox" id="bait" ${bait ? 'checked' : ''} ${s.inventory.bait === 0 ? 'disabled' : ''}><span>Köder einsetzen <small>${s.inventory.bait} verfügbar · seltene Chance ${(huntChance(g, bait) * 100).toFixed(1)} %</small></span></label>` : ''}
-    ${encounter ? `<div class="encounter-note">Vereinfachte Begegnung · Erfolg simuliert${node.type === 'M' ? `<br>Monster-HP ×${g.effects.hp.multiplier.toFixed(2)} · Angriff ×${g.effects.attack.multiplier.toFixed(2)}` : ''}</div><button id="resolve" class="primary">Begegnung abschließen ${icon('chevron', '', 18)}</button>` : a === 'next' ? `<button id="enter" class="primary" ${s.status !== 'exploring' || (s.energy < 1 && !s.view.infinite && node.kind !== 'end') ? 'disabled' : ''}>Ort betreten <span>${node.kind === 'end' ? 'Ziel' : `${icon('energy', '', 16)} 1`}</span></button>${s.status === 'encounter' ? '<button id="return-encounter" class="text-button">Aktuelle Begegnung abschließen →</button>' : ''}` : a === 'current' && s.status !== 'finished' ? '<div class="next-hint">Wähle einen markierten Ort auf der Karte.<br>Inspizieren ist kostenlos.</div>' : ''}
+    ${encounter && node.type === 'W' ? `<label class="bait-control"><input type="checkbox" id="bait" ${bait ? 'checked' : ''} ${s.inventory.bait === 0 ? 'disabled' : ''}><span>Köder einsetzen <small>${s.inventory.bait} verfügbar · seltene Chance ${(huntChance(g, bait) * 100).toFixed(1)} %</small></span></label>` : ''}
+    ${encounter ? `<div class="encounter-note">Vereinfachte Begegnung · Erfolg simuliert${node.type === 'M' ? `<br>Monster-HP ×${g.effects.hp.multiplier.toFixed(2)} · Angriff ×${g.effects.attack.multiplier.toFixed(2)} · Leech ${percent(g.effects.leech.percent)}` : ''}</div><button id="resolve" class="primary">Begegnung abschließen ${icon('chevron', '', 18)}</button>` : a === 'next' ? `<button id="enter" class="primary" ${s.status !== 'exploring' || (s.energy < 1 && !s.view.infinite && node.kind !== 'end') ? 'disabled' : ''}>Ort betreten <span>${node.kind === 'end' ? 'Ziel' : `${icon('energy', '', 16)} 1`}</span></button>${s.status === 'encounter' ? '<button id="return-encounter" class="text-button">Aktuelle Begegnung abschließen →</button>' : ''}` : a === 'current' && s.status !== 'finished' ? '<div class="next-hint">Wähle einen markierten Ort auf der Karte.<br>Inspizieren ist kostenlos.</div>' : ''}
     ${reward ? `<div class="reward"><strong>✓ Begegnung abgeschlossen</strong><span>+${reward.loot} Beute${reward.herbs ? ` · +${reward.herbs} Kräuter` : ''}${reward.fragment ? ` · +1 ${escape(secret.resourceLabel)}` : ''}${reward.unique ? ' · seltener Fund!' : ''}${reward.bait ? ' · 1 Köder verbraucht' : ''}</span></div>` : ''}
     ${a === 'locked' ? `<p class="micro">Nimm den freien Weg daneben, wenn dir ${escape(secret.resourceLabel.toLowerCase())} fehlen.</p>` : ''}
     ${a === 'current' && s.status === 'floor-cleared' ? `<button id="descend-inspector" class="primary">${icon('gate', '', 20)} Weiter zu Ebene ${g.config.floor + 1} ↓</button>` : ''}
@@ -127,7 +130,7 @@ function render(scrollToPlayer = false) {
     <div class="map-legend"><span><i class="legend-current"></i>Du</span><span><i class="legend-next"></i>Nächster Ort</span><span><i class="legend-rumor"></i>Gerücht</span><span class="map-progress">${progress} / ${profile.depth} auf dieser Ebene</span></div>
     <div class="journey-progress"><span style="width:${progress / profile.depth * 100}%"></span></div>
     ${summaryMarkup()}${controls()}<p class="prototype-note">Gespeicherte Energie, freie Zeiteinteilung. Kein GPS. Alle Werte sind Testdaten.</p>
-    </section>${inspector()}</main><footer class="page-footer"><span>PRADO / WAYSTONE EXPLORATIONS</span><span>Deckinhalte nach den offiziellen Waystone-Seiten · Rollen im Prototyp simuliert</span><span>LAB v3.0</span></footer>
+    </section>${inspector()}</main><footer class="page-footer"><span>PRADO / WAYSTONE EXPLORATIONS</span><span>Deckinhalte nach den offiziellen Waystone-Seiten · Rollen im Prototyp simuliert</span><span>LAB v4.0</span></footer>
     ${notice ? `<div class="toast" role="status">${escape(notice)}<button id="dismiss" aria-label="Hinweis schließen">×</button></div>` : ''}
     ${importOpen ? '<div class="dialog-backdrop"><section class="import-dialog" role="dialog" aria-modal="true" aria-labelledby="import-title"><h2 id="import-title">Reise importieren</h2><p>Wähle einen JSON-Export oder füge ihn hier ein. Der aktuelle Run wird erst nach erfolgreicher Prüfung ersetzt.</p><input id="import-file" type="file" accept=".json,application/json"><textarea id="import-text" rows="8" aria-label="JSON-Speicherstand" placeholder="JSON-Speicherstand …"></textarea><p id="import-error" role="alert"></p><div class="lab-buttons"><button id="cancel-import">Abbrechen</button><button class="primary" id="apply-import">Importieren</button></div></section></div>' : ''}`;
   bind();
