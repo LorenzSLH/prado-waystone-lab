@@ -1,4 +1,4 @@
-import { GENERATOR_VERSION, LEVELS, RUNES, TYPES, normalizeConfig, effects } from './config.js';
+import { GENERATOR_VERSION, RUNES, TYPES, normalizeConfig, effects, floorProfile } from './config.js';
 
 export function rng(seed) {
   let h = 2166136261;
@@ -22,7 +22,7 @@ const ROUTES = [
 ];
 const NAMES = { M: ['Dornenwächter', 'Wölfe am Wegrand', 'Schatten im Farn', 'Steinerner Wächter'], F: ['Silberblatt-Lichtung', 'Wilder Kräutergarten', 'Moosige Quelle', 'Pilze im Morgenlicht'], H: ['Spuren im Nebel', 'Das stille Jagdrevier', 'Ruf aus den Bäumen', 'Die tiefe Fährte'], E: ['Vergessener Schrein', 'Ein fremdes Lager', 'Flüsternde Steine', 'Der alte Wegweiser'] };
 export function topology(config) {
-  const p = LEVELS[config.level], random = rng(`${config.seed}|topology|${GENERATOR_VERSION}`);
+  const p = floorProfile(config), random = rng(`${config.seed}|floor:${config.floor || 1}|topology|${GENERATOR_VERSION}`);
   const nodes = [], edges = [], width = p.routes * 280, height = (p.depth + 2) * 112 + 120;
   const add = (id, depth, routeId, x, kind = 'encounter') => {
     const node = { id, depth, routeId, x: Math.round(x), y: height - 80 - depth * 112, kind };
@@ -36,23 +36,32 @@ export function topology(config) {
   for (const route of routes) {
     let previous = [entry];
     const forkDepths = new Set([p.depth - 2]);
-    for (let f = 0; f < config.level - 1; f++) forkDepths.add(4 + f * 4);
-    for (let d = 2; d <= p.depth; d++) {
+    for (let d = 4; d < p.depth - 3; d += 4) forkDepths.add(d);
+    for (let d = 2; d < p.depth; d++) {
       const count = forkDepths.has(d) ? (d === p.depth - 2 ? 2 : (random() < .35 ? 3 : 2)) : 1;
       // One-row forks are always separated by chains. Disjoint corridor intervals prove planarity.
       const current = Array.from({ length: count }, (_, j) => add(`${route.id}-${d}-${j}`, d, route.id, route.x + (j - (count - 1) / 2) * 82 + (random() - .5) * 10));
-      for (const a of previous) for (const b of current) link(a, b);
+      if (route.id === 'r1' && d === p.depth - 2) current[0].secret = 'entrance';
+      if (route.id === 'r1' && d === p.depth - 1) {
+        current[0].x = route.x + 45;
+        const cache = add('secret-cache', d, route.id, route.x - 65);
+        cache.secret = 'passage';
+        link(previous[0], cache);
+        previous.slice(1).forEach(a => link(a, current[0]));
+        current.push(cache);
+      } else for (const a of previous) for (const b of current) link(a, b);
       previous = current;
     }
-    if (config.separation === 'strong') { const end = add(`${route.id}-end`, p.depth + 1, route.id, route.x, 'end'); previous.forEach(n => link(n, end)); }
-    else ends.push(...previous);
+    ends.push(...previous);
   }
-  if (config.separation === 'final') { const end = add('end', p.depth + 1, null, width / 2, 'end'); ends.forEach(n => link(n, end)); }
+  const boss = add('boss', p.depth, null, width / 2);
+  ends.forEach(n => link(n, boss));
+  const end = add('end', p.depth + 1, null, width / 2, 'end'); link(boss, end);
   return { nodes, edges, routes, width, height };
 }
 export function generate(input) {
-  const config = normalizeConfig(input), graph = topology(config), p = LEVELS[config.level];
-  const random = rng(`${config.seed}|content|${config.runes.join(',')}|${GENERATOR_VERSION}`);
+  const config = normalizeConfig(input), graph = topology(config), p = floorProfile(config);
+  const random = rng(`${config.seed}|floor:${config.floor}|content|${config.runes.join(',')}|${GENERATOR_VERSION}`);
   const weights = Object.fromEntries(TYPES.map(t => [t, config.runes.reduce((s, id) => s + RUNES.find(r => r.id === id).encounterUnits[t], 0)]));
   const slots = graph.nodes.filter(n => n.kind === 'encounter'), counts = budgets(slots.length, weights), left = { ...counts };
   const node = id => graph.nodes.find(n => n.id === id);
@@ -62,6 +71,7 @@ export function generate(input) {
     Object.assign(n, { type, special, name }); left[type]--; return true;
   };
   const quests = [];
+  if (!reserve('boss', ['M'], p.finalBoss ? 'boss' : 'miniboss', p.finalBoss ? 'Der König unter den Wurzeln' : 'Der Wächter der Tiefe')) throw Error('Ein Ebenenboss braucht mindestens einen Monsterplatz.');
   const huntId = `r0-${p.depth - 1}-0`;
   const huntOk = reserve(huntId, ['H'], 'hunt', 'Das Revier des Silberhirschs');
   quests.push({ id: 'hunt', title: 'Der Silberhirsch', target: huntId, compatible: huntOk, reason: huntOk ? '' : 'Kein Hunt-Budget verfügbar.', description: 'Schließe die Jagd ab. Köder erhöht die Chance auf den seltenen Silberhirsch; der Fund ist keine Pflicht.' });
@@ -71,6 +81,10 @@ export function generate(input) {
   if (gateOk) {
     reserve(gateId, ['E'], 'gate', 'Das Tor der Morgenröte');
     fragmentIds.forEach((id, i) => reserve(id, ['E', 'M', 'F'], 'fragment', `Runenfragment ${i + 1}`));
+    node(`r1-${p.depth - 3}-0`).discovers = 'entrance';
+    node(gateId).discovers = 'passage';
+    node('secret-cache').special = 'treasure';
+    node('secret-cache').name = 'Die verborgene Schatzkammer';
   }
   quests.push({ id: 'gate', title: 'Ein geteiltes Licht', target: gateId, prerequisites: fragmentIds, compatible: gateOk, reason: gateOk ? '' : 'Fragmenttor nicht mit diesem Budget kompatibel.', description: 'Finde zwei Runenfragmente auf der versunkenen Straße und öffne das optionale Tor. Ein freier Pfad führt daran vorbei.' });
   const forageId = `${p.routes === 3 ? 'r2' : 'r0'}-3-0`;
@@ -87,13 +101,14 @@ export function generate(input) {
       n.type = type; left[type]--;
     }
     n.name ||= NAMES[n.type][Math.floor(random() * NAMES[n.type].length)];
-    const encounter = rng(`${config.seed}|encounter|${config.runes.join(',')}|${n.id}|${GENERATOR_VERSION}`);
+    const encounter = rng(`${config.seed}|floor:${config.floor}|encounter|${config.runes.join(',')}|${n.id}|${GENERATOR_VERSION}`);
     n.outcome = { roll: encounter(), loot: 3 + Math.floor(encounter() * 6), herbs: 1 + Math.floor(encounter() * 3) };
   }
   node('start').name = 'Der Wegstein';
-  graph.nodes.filter(n => n.kind === 'end').forEach(n => { n.name = 'Ein neuer Horizont'; });
-  const rumorRandom = rng(`${config.seed}|rumors|${GENERATOR_VERSION}`);
-  const rumors = quests.filter(q => q.compatible).map(q => ({ id: q.target, rank: rumorRandom() })).sort((a, b) => a.rank - b.rank).map(r => r.id);
+  node('end').name = config.floor < p.floors ? 'Das Tor in die Tiefe' : 'Der Weg nach Hause';
+  node('end').special = config.floor < p.floors ? 'descent' : 'exit';
+  const rumorRandom = rng(`${config.seed}|floor:${config.floor}|rumors|${GENERATOR_VERSION}`);
+  const rumors = quests.filter(q => q.compatible && !node(q.target).secret).map(q => ({ id: q.target, rank: rumorRandom() })).sort((a, b) => a.rank - b.rank).map(r => r.id);
   const result = { generatorVersion: GENERATOR_VERSION, config, ...graph, counts, weights, effects: effects(config.runes), quests, rumors };
   validateGraph(result);
   return result;
@@ -125,7 +140,7 @@ export function questSolvable(graph, quest) {
 }
 export function validateGraph(g) {
   const fail = s => { throw Error(`Generator: ${s} [${g.config.seed}, L${g.config.level}]`); };
-  const byId = new Map(g.nodes.map(n => [n.id, n])), p = LEVELS[g.config.level];
+  const byId = new Map(g.nodes.map(n => [n.id, n])), p = floorProfile(g.config);
   if (byId.size !== g.nodes.length || g.nodes.length > p.depth * p.routes * 3 + 5) fail('Knotengrenze/IDs');
   if (reachable(g, 'start').size !== g.nodes.length) fail('unerreichbare Knoten');
   const actual = Object.fromEntries(TYPES.map(t => [t, 0]));
@@ -141,7 +156,7 @@ export function validateGraph(g) {
     const a = byId.get(e.from), b = byId.get(e.to);
     if (!a || !b || b.depth !== a.depth + 1) fail('Rückwärtskante/Tiefe');
     if (a.routeId && b.routeId && a.routeId !== b.routeId) fail('Querverbindung');
-    if (a.routeId && !b.routeId && !(g.config.separation === 'final' && b.kind === 'end')) fail('unerlaubte Zusammenführung');
+    if (a.routeId && !b.routeId && b.id !== 'boss') fail('unerlaubte Zusammenführung');
   }
   for (let i = 0; i < g.edges.length; i++) for (let j = i + 1; j < g.edges.length; j++) {
     const a = g.edges[i], b = g.edges[j];
@@ -149,5 +164,7 @@ export function validateGraph(g) {
     if (segmentsCross(byId.get(a.from), byId.get(a.to), byId.get(b.from), byId.get(b.to))) fail('Kantenkreuzung');
   }
   for (const q of g.quests) if (!questSolvable(g, q)) fail(`Quest ${q.id} nicht lösbar`);
+  if (g.nodes.filter(n => n.kind === 'end').length !== 1 || g.edges.some(e => e.to === 'end' && e.from !== 'boss')) fail('Abschluss ohne Boss');
+  for (const n of g.nodes.filter(n => n.id !== 'end')) if (!reachable(g, n.id).has('boss')) fail('Pfad führt nicht zum Boss');
   return true;
 }

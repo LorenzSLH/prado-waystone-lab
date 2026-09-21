@@ -1,17 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generate, topology, budgets, questSolvable, reachable } from '../src/generation.js';
-import { RUNES, LEVELS, DEFAULT_CONFIG, TYPES, effects } from '../src/config.js';
+import { RUNES, LEVELS, DEFAULT_CONFIG, TYPES, effects, floorProfile } from '../src/config.js';
 
 const combinations = [];
 for (let a = 0; a < 4; a++) for (let b = a + 1; b < 5; b++) for (let c = b + 1; c < 6; c++) combinations.push([RUNES[a].id, RUNES[b].id, RUNES[c].id]);
 const signature = g => JSON.stringify({ nodes: g.nodes.map(({ id, depth, routeId, x, y, kind }) => ({ id, depth, routeId, x, y, kind })), edges: g.edges });
 
-test('4,000 graph matrix: 20 rune sets × 5 levels × 20 seeds × both separation modes', () => {
+test('5,600 graph matrix: every rune set, level, 20 seeds, single/multi-floor and every floor', () => {
   let graphs = 0, threeWayFork = false;
-  for (const runes of combinations) for (let level = 1; level <= 5; level++) for (let seed = 0; seed < 20; seed++) for (const separation of ['strong', 'final']) {
-    const config = { seed: `matrix-${seed}`, runes, level, separation }, g = generate(config);
-    const label = JSON.stringify(config), p = LEVELS[level];
+  for (const runes of combinations) for (let level = 1; level <= 5; level++) for (let seed = 0; seed < 20; seed++) for (const descent of [false, true]) for (let floor = 1; floor <= floorProfile({ level, descent }).floors; floor++) {
+    const config = { seed: `matrix-${seed}`, runes, level, descent, floor }, g = generate(config);
+    const label = JSON.stringify(config), p = floorProfile(config);
     assert.equal(Object.values(g.counts).reduce((a, b) => a + b), g.nodes.filter(n => n.kind === 'encounter').length, label);
     // Independent dynamic path-length check, not just node depth fields.
     const depths = new Map([['start', new Set([0])]]);
@@ -33,10 +33,16 @@ test('4,000 graph matrix: 20 rune sets × 5 levels × 20 seeds × both separatio
       assert.ok([...future].some(id => g.nodes.find(n => n.id === id).kind === 'end'), label);
     }
     for (const q of g.quests) { assert.equal(q.compatible, true, label); assert.equal(questSolvable(g, q), true, label); }
+    assert.equal(g.nodes.find(n => n.id === 'boss').special, p.finalBoss ? 'boss' : 'miniboss', label);
+    assert.equal(g.nodes.filter(n => n.kind === 'end').length, 1);
+    const withoutBoss = { ...g, edges: g.edges.filter(e => e.to !== 'boss') };
+    assert.equal(reachable(withoutBoss, 'start').has('end'), false, label);
+    const regular = { ...g, edges: g.edges.filter(e => !g.nodes.find(n => n.id === e.to).secret) };
+    for (const n of g.nodes.filter(n => !n.secret && n.id !== 'end')) assert.ok(reachable(regular, n.id).has('boss'), label);
     for (const n of g.nodes) for (const other of g.nodes) if (n.id !== other.id && n.depth === other.depth) assert.ok(Math.abs(n.x - other.x) >= 70, `Touch targets overlap: ${label}`);
     graphs++;
   }
-  assert.equal(graphs, 4000); assert.ok(threeWayFork);
+  assert.equal(graphs, 5600); assert.ok(threeWayFork);
 });
 
 test('determinism, normalized rune order, independent topology stream', () => {
@@ -62,7 +68,7 @@ test('incompatible feature is marked, never inserted into a zero budget', () => 
   } finally { RUNES.slice(0, 3).forEach((r, i) => { r.encounterUnits = prior[i]; }); }
 });
 test('config validation and additive effects', () => {
-  for (const bad of [{ seed: '' }, { seed: ' '.repeat(10) }, { seed: 'x'.repeat(81) }, { level: 0 }, { level: 1.5 }, { level: 6 }, { runes: ['hunt', 'hunt', 'ruin'] }, { runes: ['none', 'wild', 'ruin'] }, { separation: 'cross' }]) assert.throws(() => generate({ ...DEFAULT_CONFIG, ...bad }));
+  for (const bad of [{ seed: '' }, { seed: ' '.repeat(10) }, { seed: 'x'.repeat(81) }, { level: 0 }, { level: 1.5 }, { level: 6 }, { runes: ['hunt', 'hunt', 'ruin'] }, { runes: ['none', 'wild', 'ruin'] }, { descent: 'yes' }, { floor: 2 }]) assert.throws(() => generate({ ...DEFAULT_CONFIG, ...bad }));
   assert.throws(() => generate(null));
   const mods = effects(['hunt', 'haven', 'trail']);
   assert.equal(mods.hp.percent, 35); assert.equal(mods.hp.multiplier, 1.35);

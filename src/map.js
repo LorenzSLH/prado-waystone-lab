@@ -1,5 +1,5 @@
 import { icon, nodeIcon, paths } from './icons.js';
-import { visibility, accessibility } from './model.js';
+import { visibility, accessibility, secretAvailable } from './model.js';
 export const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function scenery(g) {
@@ -15,21 +15,22 @@ function scenery(g) {
 }
 export function renderMap(graph, state, selected) {
   const byId = new Map(graph.nodes.map(n => [n.id, n])), visited = new Set(state.visitedNodeIds);
-  const edgeMarkup = graph.edges.filter(e => state.view.debug || state.knownEdges.includes(e.id)).map(e => {
+  const edgeMarkup = graph.edges.filter(e => state.view.debug || ((state.view.paths || state.knownEdges.includes(e.id)) && secretAvailable(state, byId.get(e.from)) && secretAvailable(state, byId.get(e.to)))).map(e => {
     const a = byId.get(e.from), b = byId.get(e.to), walked = visited.has(a.id) && visited.has(b.id);
     return `<path class="map-edge ${walked ? 'walked' : ''}" d="M${a.x},${a.y} L${b.x},${b.y}"/>`;
   }).join('');
-  const hidden = graph.nodes.filter(n => visibility(graph, state, n.id) === 'hidden');
+  const hidden = graph.nodes.filter(n => !n.secret && visibility(graph, state, n.id) === 'hidden');
   const fog = hidden.map(n => `<ellipse cx="${n.x}" cy="${n.y}" rx="110" ry="95"/>`).join('');
   const nodes = graph.nodes.filter(n => visibility(graph, state, n.id) !== 'hidden').map(n => {
     const v = visibility(graph, state, n.id), a = accessibility(graph, state, n.id), active = a === 'current';
-    const label = n.kind === 'start' ? 'DER WEGSTEIN' : n.kind === 'end' ? 'HORIZONT' : v === 'rumor' ? (n.special === 'hunt' ? 'SILBERHIRSCH' : n.special === 'gate' ? 'FRAGMENTTOR' : 'SILBERBLATT') : n.special === 'fragment' ? 'FRAGMENT' : n.special === 'gate' ? 'TOR' : '';
-    return `<g id="node-${n.id}" data-node="${n.id}" class="map-node ${a} ${v} ${n.id === selected ? 'selected' : ''}" transform="translate(${n.x},${n.y})" tabindex="0" role="button" aria-label="${escape(n.name)} – ${v === 'rumor' ? 'Gerücht' : a === 'next' ? 'betretbar' : a === 'current' ? 'aktueller Ort' : a === 'missed' ? 'verpasst' : 'inspizieren'}">
+    const unknown = v === 'unknown';
+    const label = unknown ? '' : n.kind === 'start' ? 'DER WEGSTEIN' : n.kind === 'end' ? (n.special === 'descent' ? 'ABSTIEG' : 'AUSGANG') : n.special === 'boss' ? 'ENDBOSS' : n.special === 'miniboss' ? 'MINIBOSS' : v === 'rumor' ? (n.special === 'hunt' ? 'SILBERHIRSCH' : 'SILBERBLATT') : n.special === 'fragment' ? 'FRAGMENT' : n.special === 'gate' ? 'GEHEIMTOR' : n.special === 'treasure' ? 'SCHATZKAMMER' : '';
+    return `<g id="node-${n.id}" data-node="${n.id}" class="map-node ${a} ${v} ${!unknown && ['boss', 'miniboss'].includes(n.special) ? 'boss-node' : ''} ${n.id === selected ? 'selected' : ''}" transform="translate(${n.x},${n.y})" tabindex="0" role="button" aria-label="${unknown ? 'Unbekannter Ort' : escape(n.name)} – ${v === 'rumor' ? 'Gerücht' : a === 'next' ? 'betretbar' : a === 'current' ? 'aktueller Ort' : a === 'missed' ? 'verpasst' : 'inspizieren'}">
       <circle class="hit-area" r="35"/>
       ${active ? '<circle class="current-ring" r="30"/><path class="player" d="m-5-40 5 7 5-7Z"/>' : ''}
       ${v === 'rumor' ? '<circle class="rumor-ring" r="29"/>' : ''}
       <circle class="node-base" r="23"/>
-      <g transform="translate(-16,-16)" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[nodeIcon(n)]}</g>
+      <g transform="translate(-16,-16)" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[unknown ? 'unknown' : nodeIcon(n)]}</g>
       ${label ? `<text class="node-label" y="47" text-anchor="middle">${label}</text>` : ''}
       ${state.resolvedEncounters[n.id] ? '<circle class="done-dot" cx="21" cy="-19" r="8"/><path class="done-check" d="m17-19 3 3 5-6"/>' : ''}
     </g>`;

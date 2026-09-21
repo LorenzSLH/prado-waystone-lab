@@ -9,7 +9,7 @@ const view = (s, changes) => dispatch(s, { type: 'view', view: { ...s.state.view
 function move(s, id, bait = false) { s = dispatch(s, { type: 'enter', id }); if (s.state.status === 'encounter') s = dispatch(s, { type: 'resolve', bait }); return s; }
 function walk(s, route, gate = false) {
   s = view(s, { infinite: true });
-  while (s.state.status !== 'finished') {
+  while (!['finished', 'floor-cleared'].includes(s.state.status)) {
     const options = s.graph.edges.filter(e => e.from === s.state.currentNodeId).map(e => getNode(s.graph, e.to));
     const next = options.find(n => (!n.routeId || n.routeId === route) && (gate || n.special !== 'gate'));
     s = move(s, next.id, next.type === 'H' && s.state.inventory.bait > 0);
@@ -73,15 +73,15 @@ test('graph-distance fog, rumors disclose no connecting edges, known missed rumo
     assert.equal(visibility(fresh.graph, fresh.state, id), 'rumor');
     assert.ok(fresh.graph.edges.filter(e => e.from === id || e.to === id).every(e => !fresh.state.knownEdges.includes(e.id)));
   }
-  s = move(move(fresh, 'entry'), 'r0-2-0');
-  const gate = s.graph.quests.find(q => q.id === 'gate').target;
-  assert.equal(accessibility(s.graph, s.state, gate), 'missed');
-  assert.equal(visibility(s.graph, s.state, gate), 'rumor');
+  s = move(move(fresh, 'entry'), 'r1-2-0');
+  const rumor = s.graph.quests.find(q => q.id === 'hunt').target;
+  assert.equal(accessibility(s.graph, s.state, rumor), 'missed');
+  assert.equal(visibility(s.graph, s.state, rumor), 'rumor');
   const before = structuredClone(s.graph), known = [...s.state.knownNodes];
   s = view(s, { debug: true });
   assert.deepEqual(s.state.knownNodes, known);
   s = view(s, { debug: false, fog: 'local', rumorCount: 0 });
-  assert.equal(visibility(s.graph, s.state, gate), 'rumor');
+  assert.equal(visibility(s.graph, s.state, rumor), 'rumor');
   assert.deepEqual(s.graph, before);
   const expanded = view(s, { preview: 5 });
   assert.ok(expanded.state.knownNodes.length > s.state.knownNodes.length);
@@ -113,7 +113,7 @@ test('bait consumed once, chance increased but never guaranteed, deterministic o
   assert.ok(unique && normal);
 });
 test('energy limit blocks entry; refill and explicit infinite mode work', () => {
-  let s = make({ level: 5 });
+  let s = make({ level: 5, descent: false });
   s = move(s, 'entry');
   for (let d = 2; d <= 12; d++) s = move(s, `r0-${d}-0`);
   assert.equal(s.state.energy, 0);

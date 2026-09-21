@@ -1,5 +1,6 @@
-export const GENERATOR_VERSION = '1.0.0';
-export const SCHEMA_VERSION = 1;
+export const GENERATOR_VERSION = '2.0.0';
+export const SCHEMA_VERSION = 2;
+export const BOSS_FROM_LEVEL = 3;
 export const TYPES = ['E', 'F', 'H', 'M'];
 export const TYPE_NAMES = { M: 'Monster', F: 'Sammeln', H: 'Hunt', E: 'Ereignis' };
 export const LEVELS = [null, { depth: 8, preview: 1, routes: 2 }, { depth: 12, preview: 2, routes: 2 }, { depth: 16, preview: 3, routes: 3 }, { depth: 20, preview: 4, routes: 3 }, { depth: 24, preview: 5, routes: 3 }];
@@ -12,14 +13,21 @@ export const RUNES = [
   { id: 'trail', name: 'Fährte', icon: 'trail', flavor: 'Jede Spur erzählt eine Geschichte.', encounterUnits: { M: 2, F: 2, H: 3, E: 1 }, difficultyMods: { hp: 10 }, rewardMods: { bait: 20 }, typeBias: 'H' },
 ];
 export const MOD_NAMES = { hp: 'Monster-HP', attack: 'Monsterangriff', heal: 'Heilwirkung', loot: 'Monsterloot', forage: 'Sammelertrag', fragment: 'Fragment-Bonusloot', rare: 'Seltene Lootgewichte', bait: 'Ködergewicht' };
-export const DEFAULT_CONFIG = { seed: 'MOOSPFAD-42', level: 1, runes: ['hunt', 'wild', 'ruin'], separation: 'strong' };
-export const DEFAULT_VIEW = { fog: 'rumors', preview: 0, rumorCount: 3, debug: false, infinite: false };
+export const DEFAULT_CONFIG = { seed: 'MOOSPFAD-42', level: 1, runes: ['hunt', 'wild', 'ruin'], descent: true, floor: 1 };
+export const DEFAULT_VIEW = { fog: 'rumors', paths: true, preview: 0, rumorCount: 3, debug: false, infinite: false };
+export function floorProfile(config) {
+  const base = LEVELS[config.level];
+  const floors = config.descent === false ? 1 : [0, 1, 1, 2, 2, 3][config.level];
+  return { ...base, depth: base.depth / floors, floors, finalBoss: config.level >= BOSS_FROM_LEVEL && (config.floor || 1) === floors };
+}
 export function normalizeConfig(input) {
   if (!input || typeof input.seed !== 'string' || !input.seed.trim() || input.seed.trim().length > 80) throw Error('Seed: bitte 1–80 Zeichen eingeben.');
   if (!Number.isInteger(input.level) || !LEVELS[input.level]) throw Error('Level muss zwischen 1 und 5 liegen.');
   if (!Array.isArray(input.runes) || input.runes.length !== 3 || new Set(input.runes).size !== 3 || input.runes.some(id => !RUNES.some(r => r.id === id))) throw Error('Wähle genau drei unterschiedliche Runen.');
-  if (!['strong', 'final'].includes(input.separation)) throw Error('Unbekannte Routentrennung.');
-  return { seed: input.seed.trim().normalize('NFC'), level: input.level, runes: [...input.runes].sort(), separation: input.separation };
+  if (typeof input.descent !== 'boolean') throw Error('Ebenenabstieg muss ein- oder ausgeschaltet sein.');
+  const floor = input.floor ?? 1;
+  if (!Number.isInteger(floor) || floor < 1 || floor > floorProfile(input).floors) throw Error('Ungültige Ebene.');
+  return { seed: input.seed.trim().normalize('NFC'), level: input.level, runes: [...input.runes].sort(), descent: input.descent, floor };
 }
 export function effects(ids) {
   const mods = Object.fromEntries(Object.keys(MOD_NAMES).map(k => [k, 0]));

@@ -1,4 +1,8 @@
 export const paths = {
+  unknown: '<circle cx="16" cy="16" r="3"/><path d="M16 5v3m0 16v3M5 16h3m16 0h3"/>',
+  boss: '<path d="m4 9 6 4 6-9 6 9 6-4-3 13H7ZM8 26h16m-12-9h1m6 0h1"/>',
+  miniboss: '<path d="M6 7h20v9c0 8-10 14-10 14S6 24 6 16Z"/><path d="m11 13 5 8 5-8m-5-4v12"/>',
+  treasure: '<path d="M4 15V9c0-7 24-7 24 0v6M4 15h24v13H4ZM4 11h24M11 3v8m10-8v8"/><path d="M13 14h6v7h-6Z"/>',
   waystone: '<path d="M16 2 25 10 22 29H10L7 10Z"/><path d="m16 7-5 9 5 9 5-9Zm0 0v18m-5-9h10"/>',
   monster: '<path d="m7 12-3-8 9 5h6l9-5-3 8 1 9-6 6h-8l-6-6Z"/><path d="m10 15 3 2m9-2-3 2m-7 5 4 2 4-2m-4-3v5"/>',
   forage: '<path d="M16 29V14M16 21C4 24 3 14 4 10c8 0 12 4 12 11Zm0-5C15 6 22 3 28 4c0 8-4 12-12 12Z"/><path d="m8 15 8 6m6-12-6 7"/>',
@@ -16,4 +20,4 @@ export const paths = {
 export function icon(name, cls = '', size = 24) {
   return `<svg class="icon ${cls}" width="${size}" height="${size}" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.event}</svg>`;
 }
-export function nodeIcon(n) { return n.kind === 'start' ? 'waystone' : n.kind === 'end' ? 'end' : n.special === 'fragment' ? 'fragment' : n.special === 'gate' ? 'gate' : ({ M: 'monster', F: 'forage', H: 'hunt', E: 'event' }[n.type]); }
+export function nodeIcon(n) { return n.kind === 'start' ? 'waystone' : n.special === 'descent' ? 'gate' : n.kind === 'end' ? 'end' : ['fragment', 'gate', 'boss', 'miniboss', 'treasure'].includes(n.special) ? n.special : ({ M: 'monster', F: 'forage', H: 'hunt', E: 'event' }[n.type]); }
