@@ -1,19 +1,20 @@
 # Prüfprotokoll
 
-Stand: 21. September 2026 · Generator 2.0.0 · Node.js 24.19.0
+Stand: 21. September 2026 · Generator 3.0.0 · Node.js 24.19.0
 
 ## Automatisiert
 
-`node --test`: 17 Tests erfolgreich, einschließlich einer Matrix aus **5.600 Karten**. Alle 20 Dreierkombinationen des Runenkatalogs, Level 1–5, Seeds `matrix-0` bis `matrix-19`, jeweils Einzelebenen- und Mehr­ebenenmodus sowie jede resultierende Ebene.
+`node --test`: 19 Tests erfolgreich, einschließlich einer Matrix aus **11.200 Karten**. Beide Deckprofile, alle 20 Dreierkombinationen des Runenkatalogs, Level 1–5, Seeds `matrix-0` bis `matrix-19`, jeweils Einzelebenen- und Mehr­ebenenmodus sowie jede resultierende Ebene.
 
-Vollständige Modell-Runs über alle Hauptwege und den Geheimarm geprüft. Jeder Weg passiert denselben verpflichtenden Ebenenboss. Der Geheimarm erscheint in zwei Stufen: Eingang nach dem Entdeckungsort, nachfolgender Seitenarm nach Abschluss des Fragmenttors. Mehrere Ebenen, Mini- und Endboss, Inventarübernahme, Reset und deterministisches Replay sind geprüft. Weitere Checks und Randfälle sind in den benannten Tests dokumentiert.
+Vollständige Modell-Runs über alle Hauptwege und beide Varianten des Geheimarms geprüft. Jeder Weg passiert denselben verpflichtenden Ebenenboss. Im Filthworks öffnen zwei Valve Seals das Sluice Gate; in Meadowland wird der Game Trail ohne Schlüssel zugänglich. Mehrere Ebenen, Mini- und Endboss, Inventarübernahme, Reset und deterministisches Replay sind geprüft.
 
 ## Browserprüfung
 
 Mit Chrome 153 headless geprüft:
 
-- [x] 1440 × 900 und 390 × 844, Level 1 mit lokaler Sicht, Gerüchten und sichtbaren regulären Pfaden.
+- [x] The Filthworks bei 1440 × 1000 und Meadowland Wilds bei 390 × 844, Level 1 mit Gerüchten und sichtbaren regulären Pfaden.
 - [x] Keine Browser-Konsolenfehler, kein horizontaler Seitenüberlauf bei 390 px.
+- [x] Dungeon- und Wildnisprofil zeigen unterschiedliche Wegabstände, Verzweigungsdichte, Kartengrafik und Ortsinhalte.
 - [x] Unbekannte reguläre Orte zeigen nur neutrale Symbole; Bossname und Geheimknoten fehlen zu Beginn.
 - [x] Mobiles Detailpanel öffnet über einem direkt erreichbaren Ort und zeigt die Betreten-Aktion vollständig.
 - [x] Vollständiger Run über zwei Fragmente, Entdeckungsort, Geheimtor, Schatzkammer, Miniboss und Ausgang.

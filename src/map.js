@@ -4,6 +4,15 @@ export const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&
 
 function scenery(g) {
   let out = '';
+  if (g.deck.style === 'dungeon') {
+    for (let y = 120; y < g.height - 120; y += 224) {
+      for (let r = 0; r < g.routes.length; r++) {
+        const x = g.routes[r].x + (r % 2 ? 66 : -66);
+        out += `<g transform="translate(${x},${y})" class="terrain dungeon-mark"><path d="M-28 34V-22h56v56M-28-8h56M-17-22v14M0-22v14M17-22v14M-20 10h12v18h-12Zm28 0h12v18H8Z"/><path d="M-36 34h72m-68 8h64"/></g>`;
+      }
+    }
+    return out;
+  }
   for (let y = 140; y < g.height - 190; y += 275) {
     for (let r = 0; r <= g.routes.length; r++) {
       const x = r * 280 + (r % 2 ? 7 : 17);
@@ -24,7 +33,7 @@ export function renderMap(graph, state, selected) {
   const nodes = graph.nodes.filter(n => visibility(graph, state, n.id) !== 'hidden').map(n => {
     const v = visibility(graph, state, n.id), a = accessibility(graph, state, n.id), active = a === 'current';
     const unknown = v === 'unknown';
-    const label = unknown ? '' : n.kind === 'start' ? 'DER WEGSTEIN' : n.kind === 'end' ? (n.special === 'descent' ? 'ABSTIEG' : 'AUSGANG') : n.special === 'boss' ? 'ENDBOSS' : n.special === 'miniboss' ? 'MINIBOSS' : v === 'rumor' ? (n.special === 'hunt' ? 'SILBERHIRSCH' : 'SILBERBLATT') : n.special === 'fragment' ? 'FRAGMENT' : n.special === 'gate' ? 'GEHEIMTOR' : n.special === 'treasure' ? 'SCHATZKAMMER' : '';
+    const label = unknown ? '' : n.kind === 'start' ? 'DER WEGSTEIN' : n.kind === 'end' ? (n.special === 'descent' ? 'ABSTIEG' : 'AUSGANG') : n.special === 'boss' ? 'ENDBOSS' : n.special === 'miniboss' ? 'MINIBOSS' : v === 'rumor' ? 'GERÜCHT' : n.special === 'fragment' ? 'SCHLÜSSELTEIL' : n.special === 'gate' ? (n.secretKind === 'trail' ? 'GEHEIMPFAD' : 'GEHEIMTOR') : n.special === 'treasure' ? (n.unique ? 'EINZIGARTIGER FUND' : 'SCHATZKAMMER') : '';
     return `<g id="node-${n.id}" data-node="${n.id}" class="map-node ${a} ${v} ${!unknown && ['boss', 'miniboss'].includes(n.special) ? 'boss-node' : ''} ${n.id === selected ? 'selected' : ''}" transform="translate(${n.x},${n.y})" tabindex="0" role="button" aria-label="${unknown ? 'Unbekannter Ort' : escape(n.name)} – ${v === 'rumor' ? 'Gerücht' : a === 'next' ? 'betretbar' : a === 'current' ? 'aktueller Ort' : a === 'missed' ? 'verpasst' : 'inspizieren'}">
       <circle class="hit-area" r="35"/>
       ${active ? '<circle class="current-ring" r="30"/><path class="player" d="m-5-40 5 7 5-7Z"/>' : ''}
@@ -35,7 +44,7 @@ export function renderMap(graph, state, selected) {
       ${state.resolvedEncounters[n.id] ? '<circle class="done-dot" cx="21" cy="-19" r="8"/><path class="done-check" d="m17-19 3 3 5-6"/>' : ''}
     </g>`;
   }).join('');
-  return `<svg class="adventure-map" viewBox="0 0 ${graph.width} ${graph.height}" style="--map-ratio:${graph.width}/${graph.height};--map-min:${graph.routes.length === 3 ? 560 : 380}px" aria-label="Abenteuerkarte, Start unten, Ziel oben">
+  return `<svg class="adventure-map theme-${graph.deck.style}" viewBox="0 0 ${graph.width} ${graph.height}" style="--map-ratio:${graph.width}/${graph.height};--map-min:${graph.routes.length === 3 ? 560 : 380}px" aria-label="Abenteuerkarte, Start unten, Ziel oben">
     <defs><pattern id="contours" x="0" y="0" width="210" height="240" patternUnits="userSpaceOnUse"><path d="M-30 130C80 0 90 230 240 110M-30 140C80 10 90 240 240 120M-30 150C80 20 90 250 240 130M-30 160C80 30 90 260 240 140" fill="none" stroke="#8c947f" stroke-opacity=".07"/></pattern><filter id="fog-soft"><feGaussianBlur stdDeviation="18"/></filter></defs>
     <rect width="100%" height="100%" fill="url(#contours)"/>
     ${scenery(graph)}

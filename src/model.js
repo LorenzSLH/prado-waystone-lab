@@ -45,7 +45,7 @@ export function accessibility(graph, state, id) {
   if (state.visitedNodeIds.includes(id)) return 'visited';
   if (!n || !secretAvailable(state, n)) return 'undiscovered';
   if (!reachable(graph, state.currentNodeId).has(id)) return 'missed';
-  if (graph.edges.some(e => e.from === state.currentNodeId && e.to === id)) return n.special === 'gate' && state.inventory.fragments < 2 ? 'locked' : 'next';
+  if (graph.edges.some(e => e.from === state.currentNodeId && e.to === id)) return n.special === 'gate' && state.inventory.fragments < (n.lockCost ?? 2) ? 'locked' : 'next';
   return 'future';
 }
 export function updateQuests(graph, state) {
@@ -72,7 +72,7 @@ export function transition(graph, original, action) {
       const cost = n.kind === 'encounter' ? 1 : 0;
       if (s.energy < cost && !s.view.infinite) throw Error('Zu wenig Energie. Fülle im Labor Testenergie nach.');
       if (!s.view.infinite) s.energy -= cost;
-      if (n.special === 'gate') s.inventory.fragments -= 2;
+      if (n.special === 'gate') s.inventory.fragments -= n.lockCost ?? 2;
       s.currentNodeId = n.id; s.visitedNodeIds.push(n.id);
       s.status = n.kind === 'end' ? (graph.config.floor < floorProfile(graph.config).floors ? 'floor-cleared' : 'finished') : 'encounter';
       discover(graph, s); break;

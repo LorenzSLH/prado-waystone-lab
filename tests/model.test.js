@@ -60,6 +60,19 @@ test('locked gate has an open bypass; two compatible fragments unlock it and cos
   assert.equal(s.state.inventory.fragments, 0);
   assert.throws(() => dispatch(s, { type: 'enter', id: gate }));
 });
+test('Meadowland reveals an open game trail and its unique reliquary', () => {
+  let s = make({ deck: 'meadowland' });
+  s = move(s, 'entry');
+  for (let d = 2; d <= 5; d++) s = move(s, `r1-${d}-0`);
+  const gate = s.graph.quests.find(q => q.id === 'gate').target;
+  assert.equal(s.graph.nodes.filter(n => n.special === 'fragment').length, 0);
+  assert.equal(accessibility(s.graph, s.state, gate), 'next');
+  s = move(s, gate);
+  assert.equal(accessibility(s.graph, s.state, 'secret-cache'), 'next');
+  s = move(s, 'secret-cache');
+  assert.equal(getNode(s.graph, 'secret-cache').name, 'Gilded Sweetwater Reliquary');
+  assert.equal(accessibility(s.graph, s.state, 'boss'), 'next');
+});
 test('graph-distance fog, rumors disclose no connecting edges, known missed rumors persist', () => {
   let s = make({ level: 3 });
   s = view(s, { preview: 1 });

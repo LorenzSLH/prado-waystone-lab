@@ -2,15 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generate, topology, budgets, questSolvable, reachable } from '../src/generation.js';
 import { RUNES, LEVELS, DEFAULT_CONFIG, TYPES, effects, floorProfile } from '../src/config.js';
+import { DECK_IDS, deckFor } from '../src/decks.js';
 
 const combinations = [];
 for (let a = 0; a < 4; a++) for (let b = a + 1; b < 5; b++) for (let c = b + 1; c < 6; c++) combinations.push([RUNES[a].id, RUNES[b].id, RUNES[c].id]);
 const signature = g => JSON.stringify({ nodes: g.nodes.map(({ id, depth, routeId, x, y, kind }) => ({ id, depth, routeId, x, y, kind })), edges: g.edges });
 
-test('5,600 graph matrix: every rune set, level, 20 seeds, single/multi-floor and every floor', () => {
+test('11,200 graph matrix: both deck profiles, every rune set, level, 20 seeds, single/multi-floor and every floor', () => {
   let graphs = 0, threeWayFork = false;
-  for (const runes of combinations) for (let level = 1; level <= 5; level++) for (let seed = 0; seed < 20; seed++) for (const descent of [false, true]) for (let floor = 1; floor <= floorProfile({ level, descent }).floors; floor++) {
-    const config = { seed: `matrix-${seed}`, runes, level, descent, floor }, g = generate(config);
+  for (const deck of DECK_IDS) for (const runes of combinations) for (let level = 1; level <= 5; level++) for (let seed = 0; seed < 20; seed++) for (const descent of [false, true]) for (let floor = 1; floor <= floorProfile({ level, descent }).floors; floor++) {
+    const config = { seed: `matrix-${seed}`, deck, runes, level, descent, floor }, g = generate(config);
     const label = JSON.stringify(config), p = floorProfile(config);
     assert.equal(Object.values(g.counts).reduce((a, b) => a + b), g.nodes.filter(n => n.kind === 'encounter').length, label);
     // Independent dynamic path-length check, not just node depth fields.
@@ -42,7 +43,7 @@ test('5,600 graph matrix: every rune set, level, 20 seeds, single/multi-floor an
     for (const n of g.nodes) for (const other of g.nodes) if (n.id !== other.id && n.depth === other.depth) assert.ok(Math.abs(n.x - other.x) >= 70, `Touch targets overlap: ${label}`);
     graphs++;
   }
-  assert.equal(graphs, 5600); assert.ok(threeWayFork);
+  assert.equal(graphs, 11200); assert.ok(threeWayFork);
 });
 
 test('determinism, normalized rune order, independent topology stream', () => {
@@ -50,6 +51,25 @@ test('determinism, normalized rune order, independent topology stream', () => {
   assert.deepEqual(a, b);
   for (const runes of combinations) assert.equal(signature(generate({ ...DEFAULT_CONFIG, runes })), signature(a));
   assert.notEqual(signature(generate({ ...DEFAULT_CONFIG, seed: 'other' })), signature(a));
+  assert.notEqual(signature(generate({ ...DEFAULT_CONFIG, deck: 'meadowland' })), signature(a));
+});
+test('official Waystone deck content powers distinct dungeon and wilderness stories', () => {
+  const filth = generate({ ...DEFAULT_CONFIG, level: 3, descent: false, deck: 'filthworks' });
+  const meadow = generate({ ...DEFAULT_CONFIG, level: 3, descent: false, deck: 'meadowland' });
+  assert.equal(filth.deck.name, 'The Filthworks');
+  assert.equal(filth.nodes.find(n => n.id === 'secret-cache').name, 'Cracked Sewer Vault');
+  assert.equal(filth.nodes.find(n => n.special === 'gate').lockCost, 2);
+  assert.equal(filth.nodes.filter(n => n.special === 'fragment').length, 2);
+  assert.equal(meadow.deck.name, 'Meadowland Wilds');
+  assert.equal(meadow.nodes.find(n => n.id === 'secret-cache').name, 'Gilded Sweetwater Reliquary');
+  assert.equal(meadow.nodes.find(n => n.special === 'gate').lockCost, 0);
+  assert.equal(meadow.nodes.filter(n => n.special === 'fragment').length, 0);
+  assert.equal(meadow.nodes.find(n => n.id === 'boss').name, 'Wickerbeast');
+  for (const g of [filth, meadow]) {
+    const sourceNames = new Set([...g.deck.cards, ...g.deck.monsters, ...g.deck.rareEncounters].map(x => x.name));
+    for (const n of g.nodes.filter(n => n.kind === 'encounter' && !['gate', 'fragment'].includes(n.special))) assert.ok(sourceNames.has(n.name), `${g.deck.name}: ${n.name}`);
+  }
+  assert.deepEqual(deckFor('filthworks').composition, { monster: 4, event: 1, rest: 1, wild: 1 });
 });
 test('largest remainder exact counts, zero weight, stable tie break', () => {
   assert.deepEqual(budgets(3, { M: 1, F: 1, H: 1, E: 1 }), { E: 1, F: 1, H: 1, M: 0 });
@@ -68,7 +88,7 @@ test('incompatible feature is marked, never inserted into a zero budget', () => 
   } finally { RUNES.slice(0, 3).forEach((r, i) => { r.encounterUnits = prior[i]; }); }
 });
 test('config validation and additive effects', () => {
-  for (const bad of [{ seed: '' }, { seed: ' '.repeat(10) }, { seed: 'x'.repeat(81) }, { level: 0 }, { level: 1.5 }, { level: 6 }, { runes: ['hunt', 'hunt', 'ruin'] }, { runes: ['none', 'wild', 'ruin'] }, { descent: 'yes' }, { floor: 2 }]) assert.throws(() => generate({ ...DEFAULT_CONFIG, ...bad }));
+  for (const bad of [{ seed: '' }, { seed: ' '.repeat(10) }, { seed: 'x'.repeat(81) }, { level: 0 }, { level: 1.5 }, { level: 6 }, { deck: 'unknown' }, { runes: ['hunt', 'hunt', 'ruin'] }, { runes: ['none', 'wild', 'ruin'] }, { descent: 'yes' }, { floor: 2 }]) assert.throws(() => generate({ ...DEFAULT_CONFIG, ...bad }));
   assert.throws(() => generate(null));
   const mods = effects(['hunt', 'haven', 'trail']);
   assert.equal(mods.hp.percent, 35); assert.equal(mods.hp.multiplier, 1.35);

@@ -3,8 +3,9 @@ import { generate, topology } from './generation.js';
 import { newSession, dispatch, resetSession, importSession, visibility, accessibility, getNode, huntChance } from './model.js';
 import { icon, nodeIcon } from './icons.js';
 import { renderMap, landscape, escape } from './map.js';
+import { DECKS, deckFor } from './decks.js';
 
-const STORAGE = 'prado.waystone.v2', app = document.querySelector('#app');
+const STORAGE = 'prado.waystone.v3', app = document.querySelector('#app');
 let session, notice = '', selected, mobileConfig = false, inspectorOpen = false, diagnosticOpen = false, importOpen = false, bait = false;
 try { const saved = localStorage.getItem(STORAGE); session = saved ? importSession(saved) : newSession(DEFAULT_CONFIG); }
 catch (e) { session = newSession(DEFAULT_CONFIG); notice = `Gespeicherter Run konnte nicht geladen werden: ${e.message}`; }
@@ -26,9 +27,13 @@ function configuration() {
   const total = Object.values(preview.counts).reduce((a, b) => a + b, 0);
   const changed = JSON.stringify({ ...draft, runes: [...draft.runes].sort() }) !== JSON.stringify(session.config);
   const profile = floorProfile(draft);
+  const deck = deckFor(draft.deck);
   return `<aside class="configuration ${mobileConfig ? 'mobile-open' : ''}" aria-label="Runen und Konfiguration">
     <div class="section-eyebrow">DEIN WEGSTEIN <span>01</span></div>
-    <h2>Drei Runen.<br>Dein Abenteuer.</h2><p class="muted intro">Präge die Welt, die vor dir liegt.</p>
+    <h2>Ein Ort.<br>Dein Abenteuer.</h2><p class="muted intro">Wähle ein Waystone-Deck und präge den Weg mit drei Runen.</p>
+    <div class="section-label">WAYSTONE-DECK <span>QUELLDATEN</span></div>
+    <div class="deck-picker">${Object.values(DECKS).map(d => `<button class="deck-option ${draft.deck === d.slug ? 'chosen' : ''}" data-deck="${d.slug}" aria-pressed="${draft.deck === d.slug}"><span>${icon(d.style === 'dungeon' ? 'gate' : 'trail', '', 22)}<b>${escape(d.name)}</b></span><small>${d.style === 'dungeon' ? 'Dungeon' : 'Wildnis'} · ${escape(d.location)}</small></button>`).join('')}</div>
+    <div class="deck-reference"><strong>${escape(deck.name)}</strong><span>${escape(deck.zone)} · empfohlenes Decklevel ${deck.suggestedLevel}</span><p>${escape(deck.description)}</p><small>${deck.recipe.map(escape).join(' / ')}<br>${deck.composition.monster} Monster · ${deck.composition.event} Event · ${deck.composition.rest} Rest · ${deck.composition.wild} Wild</small><a href="${deck.sourceUrl}" target="_blank" rel="noreferrer">Offizielles Deck ansehen ↗</a></div>
     <div class="section-label">RUNEN WÄHLEN <span>${draft.runes.length} / 3</span></div>
     <div class="rune-grid">${RUNES.map(r => `<button class="rune ${draft.runes.includes(r.id) ? 'chosen' : ''}" data-rune="${r.id}" aria-pressed="${draft.runes.includes(r.id)}" title="${escape(r.flavor)}">${icon(r.icon, '', 28)}<span>${r.name}</span><i>${draft.runes.includes(r.id) ? '✓' : '+'}</i></button>`).join('')}</div>
     <div class="level-row"><label for="level">Abenteuerlevel</label><strong id="level-value">${draft.level} <span>/ 5</span></strong></div>
@@ -54,7 +59,7 @@ function questsMarkup() {
   const qs = g.quests.filter(q => !q.compatible || ['revealed', 'rumor'].includes(visibility(g, s, q.target)));
   return `<div class="quest-section"><div class="section-label">FLÜSTERN IN DER FERNE <span>${qs.length}</span></div>${qs.length ? qs.map(q => {
     const status = s.questStates[q.id], missed = status === 'missed', target = getNode(g, q.target);
-    return `<button class="quest-card ${missed ? 'missed' : ''}" ${q.compatible ? `data-node="${q.target}"` : 'disabled'}>${icon(q.id === 'gate' ? 'gate' : q.id === 'hunt' ? 'hunt' : 'forage', '', 25)}<span><strong>${escape(q.title)}</strong><small>${status === 'complete' ? '✓ Auftrag erfüllt' : missed ? 'In diesem Run nicht mehr erreichbar' : status === 'incompatible' ? escape(q.reason) : `${target.special === 'gate' ? 'Zwei Fragmente öffnen das Tor' : q.id === 'hunt' ? 'Ein seltener Gast im Jagdrevier' : 'Silberblatt wartet auf dich'}`}</small></span><span class="quest-arrow">↗</span></button>`;
+    return `<button class="quest-card ${missed ? 'missed' : ''}" ${q.compatible ? `data-node="${q.target}"` : 'disabled'}>${icon(q.id === 'gate' ? (target.secretKind === 'trail' ? 'trail' : 'gate') : q.id === 'hunt' ? 'hunt' : 'forage', '', 25)}<span><strong>${escape(q.title)}</strong><small>${status === 'complete' ? '✓ Auftrag erfüllt' : missed ? 'In diesem Run nicht mehr erreichbar' : status === 'incompatible' ? escape(q.reason) : escape(q.description)}</small></span><span class="quest-arrow">↗</span></button>`;
   }).join('') : '<p class="micro">Noch keine besonderen Orte bekannt. Erkunde die Karte oder aktiviere Gerüchte.</p>'}</div>`;
 }
 function inspector() {
@@ -63,25 +68,26 @@ function inspector() {
   const node = getNode(g, selected), a = accessibility(g, s, node.id), rumor = visibility(g, s, node.id) === 'rumor';
   if (visibility(g, s, node.id) === 'unknown') return `<aside class="inspector ${inspectorOpen ? 'sheet-open' : ''}" aria-label="Knotendetails"><div class="inspector-top"><div class="section-eyebrow">UNBEKANNTER ORT</div><button class="sheet-close" id="close-sheet" aria-label="Details schließen">×</button></div><div class="place-art unknown">${landscape()}<div class="place-emblem">${icon('unknown', '', 44)}</div><span>DER WEG IST SICHTBAR</span></div><div class="place-body"><h2>Was hier wartet?</h2><p class="place-description">Du kennst den Pfad, aber noch nicht die Begegnung. Komm näher, um den Ort zu entdecken.</p><div class="next-hint">${a === 'missed' ? 'Auf deiner Route nicht mehr erreichbar.' : 'Die Pfadansicht verrät keine Namen, Typen oder Belohnungen.'}</div></div>${questsMarkup()}</aside>`;
   const reward = s.resolvedEncounters[node.id], encounter = a === 'current' && s.status === 'encounter';
+  const secret = g.deck.secret, lockCost = node.lockCost ?? secret.lockCost;
   const type = node.special === 'boss' ? 'ENDBOSS' : node.special === 'miniboss' ? 'MINIBOSS' : node.special === 'descent' ? 'NÄCHSTE EBENE' : node.kind === 'start' ? 'DER ANFANG' : node.kind === 'end' ? 'ABSCHLUSS' : TYPE_NAMES[node.type].toUpperCase();
   const descriptions = { start: 'Ein warmer Stein in deiner Hand. Drei Runen leuchten auf. Hinter dem Nebel warten Wege, die nur du wählen kannst.', M: 'Etwas bewegt sich zwischen den Bäumen. Stell dich der Begegnung und sammle deine Beute.', F: 'Im Schatten alter Bäume wächst, was du auf deiner Reise brauchen wirst.', H: 'Frische Spuren führen tiefer in die Wildnis. Vielleicht wartet hier eine seltene Begegnung.', E: 'An diesem Ort hat die Zeit eine Geschichte zurückgelassen. Finde heraus, was sie dir erzählt.', end: 'Du hast deinen Horizont erreicht. Nicht jeder Weg wurde gegangen – und genau das macht diese Reise zu deiner.' };
   const specialDescriptions = { boss: 'Alle Wege führen hierher. Tief unter den Wurzeln wartet der wahre Herr dieses Abenteuers. Besiege ihn, um deine Reise abzuschließen.', miniboss: 'Der Wächter versperrt den Ausgang dieser Ebene. Jeder reguläre und geheime Weg führt zu dieser Begegnung.', gate: 'Hinter dem entdeckten Tor liegt ein geheimer Seitenarm. Zwei Fragmente öffnen ihn. Der reguläre Weg führt ebenfalls zum Ebenenboss.', treasure: 'Ein verborgener Vorrat belohnt deine Entdeckung mit 25 zusätzlicher Beute. Von hier führt der Weg weiter zum selben Ebenenboss.', descent: 'Der Wächter ist besiegt. Dieses Tor führt tiefer hinab. Deine Energie und dein Reisebeutel begleiten dich auf die nächste Ebene.' };
-  const statuses = { current: 'Du bist hier', next: 'Direkt erreichbar', future: 'Liegt noch vor dir', missed: 'Auf dieser Route nicht mehr erreichbar', locked: 'Gesperrt · 2 Fragmente nötig', visited: 'Bereits besucht', undiscovered: 'Debug · noch nicht entdeckt' };
+  const statuses = { current: 'Du bist hier', next: 'Direkt erreichbar', future: 'Liegt noch vor dir', missed: 'Auf dieser Route nicht mehr erreichbar', locked: `Gesperrt · ${lockCost} ${secret.resourceLabel} nötig`, visited: 'Bereits besucht', undiscovered: 'Debug · noch nicht entdeckt' };
   return `<aside class="inspector ${inspectorOpen ? 'sheet-open' : ''}" aria-label="Knotendetails">
     <div class="inspector-top"><div class="section-eyebrow">WEGGEFÄHRTE <span>03</span></div><button class="sheet-close" id="close-sheet" aria-label="Details schließen">×</button></div>
     <div class="place-art ${node.special || node.kind}">${landscape()}<div class="place-emblem">${icon(nodeIcon(node), '', 44)}</div><span>${rumor ? '✧ GERÜCHT' : type}</span></div>
     <div class="place-body"><span class="location-tag ${a}"><i></i>${statuses[a]}</span><h2>${escape(node.name)}</h2>
-    <p class="place-description">${rumor ? 'Reisende erzählen von diesem Ort. Seine Begegnung ist noch unbekannt. Du kannst ihn nur über verbundene Orte erreichen.' : escape(specialDescriptions[node.special] || descriptions[node.kind] || descriptions[node.type])}</p>
-    ${node.special === 'gate' ? `<div class="requirement">${icon('fragment')} <span>Fragmenttor<strong>${s.inventory.fragments} / 2 Fragmente ${reward ? '· geöffnet' : ''}</strong></span></div>` : ''}
-    ${!rumor && node.special === 'fragment' ? '<p class="micro">Garantierter Fund: 1 Runenfragment. Beide Teile liegen vor dem Tor auf dieser Route.</p>' : ''}
-    ${encounter && node.type === 'H' ? `<label class="bait-control"><input type="checkbox" id="bait" ${bait ? 'checked' : ''} ${s.inventory.bait === 0 ? 'disabled' : ''}><span>Köder einsetzen <small>${s.inventory.bait} verfügbar · Silberhirsch-Chance ${(huntChance(g, bait) * 100).toFixed(1)} %</small></span></label>` : ''}
+    <p class="place-description">${rumor ? 'Reisende erzählen von diesem Ort. Seine Begegnung ist noch unbekannt. Du kannst ihn nur über verbundene Orte erreichen.' : escape(node.description || specialDescriptions[node.special] || descriptions[node.kind] || descriptions[node.type])}</p>
+    ${node.special === 'gate' && lockCost ? `<div class="requirement">${icon('fragment')} <span>${escape(node.name)}<strong>${s.inventory.fragments} / ${lockCost} ${escape(secret.resourceLabel)} ${reward ? '· geöffnet' : ''}</strong></span></div>` : ''}
+    ${!rumor && node.special === 'fragment' ? `<p class="micro">Garantierter Fund: 1 ${escape(secret.resourceLabel)}. Alle Teile liegen vor dem Tor auf dieser Route.</p>` : ''}
+    ${encounter && node.type === 'H' ? `<label class="bait-control"><input type="checkbox" id="bait" ${bait ? 'checked' : ''} ${s.inventory.bait === 0 ? 'disabled' : ''}><span>Köder einsetzen <small>${s.inventory.bait} verfügbar · seltene Chance ${(huntChance(g, bait) * 100).toFixed(1)} %</small></span></label>` : ''}
     ${encounter ? `<div class="encounter-note">Vereinfachte Begegnung · Erfolg simuliert${node.type === 'M' ? `<br>Monster-HP ×${g.effects.hp.multiplier.toFixed(2)} · Angriff ×${g.effects.attack.multiplier.toFixed(2)}` : ''}</div><button id="resolve" class="primary">Begegnung abschließen ${icon('chevron', '', 18)}</button>` : a === 'next' ? `<button id="enter" class="primary" ${s.status !== 'exploring' || (s.energy < 1 && !s.view.infinite && node.kind !== 'end') ? 'disabled' : ''}>Ort betreten <span>${node.kind === 'end' ? 'Ziel' : `${icon('energy', '', 16)} 1`}</span></button>${s.status === 'encounter' ? '<button id="return-encounter" class="text-button">Aktuelle Begegnung abschließen →</button>' : ''}` : a === 'current' && s.status !== 'finished' ? '<div class="next-hint">Wähle einen markierten Ort auf der Karte.<br>Inspizieren ist kostenlos.</div>' : ''}
-    ${reward ? `<div class="reward"><strong>✓ Begegnung abgeschlossen</strong><span>+${reward.loot} Beute${reward.herbs ? ` · +${reward.herbs} Kräuter` : ''}${reward.fragment ? ' · +1 Fragment' : ''}${reward.unique ? ' · Silberhirsch entdeckt!' : ''}${reward.bait ? ' · 1 Köder verbraucht' : ''}</span></div>` : ''}
-    ${a === 'locked' ? '<p class="micro">Nimm den freien Weg daneben, wenn dir Fragmente fehlen.</p>' : ''}
+    ${reward ? `<div class="reward"><strong>✓ Begegnung abgeschlossen</strong><span>+${reward.loot} Beute${reward.herbs ? ` · +${reward.herbs} Kräuter` : ''}${reward.fragment ? ` · +1 ${escape(secret.resourceLabel)}` : ''}${reward.unique ? ' · seltener Fund!' : ''}${reward.bait ? ' · 1 Köder verbraucht' : ''}</span></div>` : ''}
+    ${a === 'locked' ? `<p class="micro">Nimm den freien Weg daneben, wenn dir ${escape(secret.resourceLabel.toLowerCase())} fehlen.</p>` : ''}
     ${a === 'current' && s.status === 'floor-cleared' ? `<button id="descend-inspector" class="primary">${icon('gate', '', 20)} Weiter zu Ebene ${g.config.floor + 1} ↓</button>` : ''}
-    ${reward && node.discovers ? `<div class="discovery-note">${icon('gate', '', 20)} ${node.discovers === 'entrance' ? 'Ein verborgenes Tor ist aufgetaucht. Inspiziere den neuen Seitenarm.' : 'Das Tor ist offen. Der geheime Weg zur Schatzkammer ist entdeckt.'}</div>` : ''}
+    ${reward && node.discovers ? `<div class="discovery-note">${icon(g.deck.style === 'dungeon' ? 'gate' : 'trail', '', 20)} ${node.discovers === 'entrance' ? `${escape(secret.discoveryName)} enthüllt ${escape(secret.entranceName)}.` : `Der geheime Weg zu ${escape(secret.vaultName)} ist entdeckt.`}</div>` : ''}
     </div>${questsMarkup()}
-    <div class="satchel"><div class="section-label">IM REISEBEUTEL</div><div class="inventory"><span>${icon('fragment')}<b>${s.inventory.fragments}</b><small>Fragmente</small></span><span>${icon('trail')}<b>${s.inventory.bait}</b><small>Köder</small></span><span>${icon('forage')}<b>${s.inventory.herbs}</b><small>Kräuter</small></span><span>${icon('event')}<b>${s.inventory.loot}</b><small>Beute</small></span></div></div>
+    <div class="satchel"><div class="section-label">IM REISEBEUTEL</div><div class="inventory"><span>${icon(g.deck.style === 'dungeon' ? 'fragment' : 'trail')}<b>${secret.lockCost ? s.inventory.fragments : s.discoveredSecrets.length}</b><small>${secret.lockCost ? escape(secret.resourceLabel) : 'Entdeckungen'}</small></span><span>${icon('trail')}<b>${s.inventory.bait}</b><small>Köder</small></span><span>${icon('forage')}<b>${s.inventory.herbs}</b><small>Kräuter</small></span><span>${icon('event')}<b>${s.inventory.loot}</b><small>Beute</small></span></div></div>
   </aside>`;
 }
 function controls() {
@@ -113,15 +119,15 @@ function render(scrollToPlayer = false) {
   const priorScroll = document.querySelector('.map-scroll'), top = priorScroll?.scrollTop, left = priorScroll?.scrollLeft;
   const { graph: g, state: s } = session, progress = Object.keys(s.resolvedEncounters).length, profile = floorProfile(g.config);
   app.innerHTML = `<header class="topbar"><a class="brand" href="./">${icon('waystone', '', 36)}<span>prado<small>WALK INTO YOUR NEXT STORY</small></span></a><div class="lab-title">WAYSTONE <span>MAP LAB</span><b>PROTOTYP</b></div><div class="header-status"><i></i> Lokal gespeichert <span class="header-separator">/</span><button id="mobile-config">${icon('waystone', '', 18)} Runen</button></div></header>
-    <main class="workspace">${configuration()}<section class="map-column" aria-label="Kartenlabor"><div class="map-heading"><div><div class="section-eyebrow">DAS UNBEKANNTE WARTET <span>02</span></div><h1>Wähle deinen Weg.</h1><p>Drei Runen. Viele Möglichkeiten. Eine Reise.</p></div><div class="energy-pill">${icon('energy', '', 20)}<strong>${s.view.infinite ? '∞' : s.energy}</strong><span>Energie</span><button id="quick-energy" aria-label="20 Testenergie hinzufügen">+</button></div></div>
-    <div class="map-toolbar"><span>${icon('compass', '', 18)} Level ${g.config.level} <i>·</i> <span class="seed-label">${escape(g.config.seed)}</span></span><button id="to-player">◎ Zur Spielfigur</button></div>
+    <main class="workspace">${configuration()}<section class="map-column theme-${g.deck.style}" aria-label="Kartenlabor"><div class="map-heading"><div><div class="section-eyebrow">${g.deck.style === 'dungeon' ? 'UNTER DER ALTSTADT' : 'DRAUSSEN IN MEADOWSHIRE'} <span>02</span></div><h1>${escape(g.deck.name)}</h1><p>${escape(g.deck.style === 'dungeon' ? 'Enge Korridore, Schlüssel und eine verborgene Vault.' : 'Weite Pfade, mehr Verzweigungen und Entdeckungen in der Wildnis.')}</p></div><div class="energy-pill">${icon('energy', '', 20)}<strong>${s.view.infinite ? '∞' : s.energy}</strong><span>Energie</span><button id="quick-energy" aria-label="20 Testenergie hinzufügen">+</button></div></div>
+    <div class="map-toolbar"><span>${icon(g.deck.style === 'dungeon' ? 'gate' : 'trail', '', 18)} ${escape(g.deck.location)} <i>·</i> Level ${g.config.level} <i>·</i> <span class="seed-label">${escape(g.config.seed)}</span></span><button id="to-player">◎ Zur Spielfigur</button></div>
     <div class="floor-strip"><span>${icon('gate', '', 17)} Ebene ${g.config.floor} / ${profile.floors}</span><span>${profile.finalBoss ? 'Endboss am Ende dieser Ebene' : 'Miniboss am Ende dieser Ebene'}</span></div>
     ${s.view.debug ? '<div class="debug-banner">DEBUG · Vollständig aufgedeckt · kein zusätzliches Wissen gespeichert</div>' : ''}
     <div class="map-scroll" tabindex="0" aria-label="Karte scrollen">${renderMap(g, s, selected)}</div>
     <div class="map-legend"><span><i class="legend-current"></i>Du</span><span><i class="legend-next"></i>Nächster Ort</span><span><i class="legend-rumor"></i>Gerücht</span><span class="map-progress">${progress} / ${profile.depth} auf dieser Ebene</span></div>
     <div class="journey-progress"><span style="width:${progress / profile.depth * 100}%"></span></div>
     ${summaryMarkup()}${controls()}<p class="prototype-note">Gespeicherte Energie, freie Zeiteinteilung. Kein GPS. Alle Werte sind Testdaten.</p>
-    </section>${inspector()}</main><footer class="page-footer"><span>PRADO / WAYSTONE EXPLORATIONS</span><span>Eine kleine Welt voller Entscheidungen.</span><span>LAB v2.0</span></footer>
+    </section>${inspector()}</main><footer class="page-footer"><span>PRADO / WAYSTONE EXPLORATIONS</span><span>Deckinhalte nach den offiziellen Waystone-Seiten · Rollen im Prototyp simuliert</span><span>LAB v3.0</span></footer>
     ${notice ? `<div class="toast" role="status">${escape(notice)}<button id="dismiss" aria-label="Hinweis schließen">×</button></div>` : ''}
     ${importOpen ? '<div class="dialog-backdrop"><section class="import-dialog" role="dialog" aria-modal="true" aria-labelledby="import-title"><h2 id="import-title">Reise importieren</h2><p>Wähle einen JSON-Export oder füge ihn hier ein. Der aktuelle Run wird erst nach erfolgreicher Prüfung ersetzt.</p><input id="import-file" type="file" accept=".json,application/json"><textarea id="import-text" rows="8" aria-label="JSON-Speicherstand" placeholder="JSON-Speicherstand …"></textarea><p id="import-error" role="alert"></p><div class="lab-buttons"><button id="cancel-import">Abbrechen</button><button class="primary" id="apply-import">Importieren</button></div></section></div>' : ''}`;
   bind();
@@ -154,6 +160,7 @@ function applyImport(text) {
   catch (e) { document.getElementById('import-error').textContent = e.message; }
 }
 function bind() {
+  document.querySelectorAll('[data-deck]').forEach(b => b.addEventListener('click', () => { draft.deck = b.dataset.deck; render(); }));
   document.querySelectorAll('[data-rune]').forEach(b => b.addEventListener('click', () => {
     const id = b.dataset.rune;
     if (draft.runes.includes(id)) draft.runes = draft.runes.filter(r => r !== id);

@@ -1,4 +1,5 @@
 import { GENERATOR_VERSION, RUNES, TYPES, normalizeConfig, effects, floorProfile } from './config.js';
+import { contentPool, deckFor } from './decks.js';
 
 export function rng(seed) {
   let h = 2166136261;
@@ -15,15 +16,11 @@ export function budgets(total, weights) {
   return Object.fromEntries(rows.map(r => [r.t, r.count]));
 }
 
-const ROUTES = [
-  { id: 'r0', name: 'Der Dornenpfad', subtitle: 'Wo die Wildnis ruft', bias: 'H' },
-  { id: 'r1', name: 'Die versunkene Straße', subtitle: 'Echos einer alten Welt', bias: 'E' },
-  { id: 'r2', name: 'Das grüne Tal', subtitle: 'Unter dem Blätterdach', bias: 'F' },
-];
-const NAMES = { M: ['Dornenwächter', 'Wölfe am Wegrand', 'Schatten im Farn', 'Steinerner Wächter'], F: ['Silberblatt-Lichtung', 'Wilder Kräutergarten', 'Moosige Quelle', 'Pilze im Morgenlicht'], H: ['Spuren im Nebel', 'Das stille Jagdrevier', 'Ruf aus den Bäumen', 'Die tiefe Fährte'], E: ['Vergessener Schrein', 'Ein fremdes Lager', 'Flüsternde Steine', 'Der alte Wegweiser'] };
 export function topology(config) {
-  const p = floorProfile(config), random = rng(`${config.seed}|floor:${config.floor || 1}|topology|${GENERATOR_VERSION}`);
-  const nodes = [], edges = [], width = p.routes * 280, height = (p.depth + 2) * 112 + 120;
+  const p = floorProfile(config), deck = deckFor(config.deck), dungeon = deck.style === 'dungeon';
+  const random = rng(`${config.seed}|${config.deck}|floor:${config.floor || 1}|topology|${GENERATOR_VERSION}`);
+  const routeSpacing = dungeon ? 250 : 300, branchSpacing = dungeon ? 82 : 88;
+  const nodes = [], edges = [], width = p.routes * routeSpacing, height = (p.depth + 2) * 112 + 120;
   const add = (id, depth, routeId, x, kind = 'encounter') => {
     const node = { id, depth, routeId, x: Math.round(x), y: height - 80 - depth * 112, kind };
     nodes.push(node); return node;
@@ -31,20 +28,20 @@ export function topology(config) {
   const link = (a, b) => edges.push({ id: `${a.id}>${b.id}`, from: a.id, to: b.id });
   const start = add('start', 0, null, width / 2, 'start');
   const entry = add('entry', 1, null, width / 2); link(start, entry);
-  const routes = ROUTES.slice(0, p.routes).map((r, i) => ({ ...r, x: i * 280 + 140 }));
+  const routes = deck.routes.slice(0, p.routes).map((r, i) => ({ ...r, x: i * routeSpacing + routeSpacing / 2 }));
   const ends = [];
   for (const route of routes) {
     let previous = [entry];
     const forkDepths = new Set([p.depth - 2]);
-    for (let d = 4; d < p.depth - 3; d += 4) forkDepths.add(d);
+    for (let d = dungeon ? 4 : 3; d < p.depth - 3; d += 4) forkDepths.add(d);
     for (let d = 2; d < p.depth; d++) {
-      const count = forkDepths.has(d) ? (d === p.depth - 2 ? 2 : (random() < .35 ? 3 : 2)) : 1;
+      const count = forkDepths.has(d) ? (d === p.depth - 2 ? 2 : (random() < (dungeon ? .2 : .65) ? 3 : 2)) : 1;
       // One-row forks are always separated by chains. Disjoint corridor intervals prove planarity.
-      const current = Array.from({ length: count }, (_, j) => add(`${route.id}-${d}-${j}`, d, route.id, route.x + (j - (count - 1) / 2) * 82 + (random() - .5) * 10));
+      const current = Array.from({ length: count }, (_, j) => add(`${route.id}-${d}-${j}`, d, route.id, route.x + (j - (count - 1) / 2) * branchSpacing + (random() - .5) * 10));
       if (route.id === 'r1' && d === p.depth - 2) current[0].secret = 'entrance';
       if (route.id === 'r1' && d === p.depth - 1) {
-        current[0].x = route.x + 45;
-        const cache = add('secret-cache', d, route.id, route.x - 65);
+        current[0].x = route.x + branchSpacing / 2;
+        const cache = add('secret-cache', d, route.id, route.x - branchSpacing / 2);
         cache.secret = 'passage';
         link(previous[0], cache);
         previous.slice(1).forEach(a => link(a, current[0]));
@@ -60,8 +57,8 @@ export function topology(config) {
   return { nodes, edges, routes, width, height };
 }
 export function generate(input) {
-  const config = normalizeConfig(input), graph = topology(config), p = floorProfile(config);
-  const random = rng(`${config.seed}|floor:${config.floor}|content|${config.runes.join(',')}|${GENERATOR_VERSION}`);
+  const config = normalizeConfig(input), graph = topology(config), p = floorProfile(config), deck = deckFor(config.deck);
+  const random = rng(`${config.seed}|${config.deck}|floor:${config.floor}|content|${config.runes.join(',')}|${GENERATOR_VERSION}`);
   const weights = Object.fromEntries(TYPES.map(t => [t, config.runes.reduce((s, id) => s + RUNES.find(r => r.id === id).encounterUnits[t], 0)]));
   const slots = graph.nodes.filter(n => n.kind === 'encounter'), counts = budgets(slots.length, weights), left = { ...counts };
   const node = id => graph.nodes.find(n => n.id === id);
@@ -71,25 +68,37 @@ export function generate(input) {
     Object.assign(n, { type, special, name }); left[type]--; return true;
   };
   const quests = [];
-  if (!reserve('boss', ['M'], p.finalBoss ? 'boss' : 'miniboss', p.finalBoss ? 'Der König unter den Wurzeln' : 'Der Wächter der Tiefe')) throw Error('Ein Ebenenboss braucht mindestens einen Monsterplatz.');
+  const bossName = deck.bosses[p.finalBoss ? 'boss' : 'miniboss'];
+  const bossContent = [...deck.monsters, ...deck.rareEncounters].find(entry => entry.name === bossName);
+  if (!reserve('boss', ['M'], p.finalBoss ? 'boss' : 'miniboss', bossName)) throw Error('Ein Ebenenboss braucht mindestens einen Monsterplatz.');
+  Object.assign(node('boss'), bossContent, { type: 'M', special: p.finalBoss ? 'boss' : 'miniboss', name: bossName, prototypeRole: p.finalBoss ? 'final boss' : 'floor boss' });
   const huntId = `r0-${p.depth - 1}-0`;
-  const huntOk = reserve(huntId, ['H'], 'hunt', 'Das Revier des Silberhirschs');
-  quests.push({ id: 'hunt', title: 'Der Silberhirsch', target: huntId, compatible: huntOk, reason: huntOk ? '' : 'Kein Hunt-Budget verfügbar.', description: 'Schließe die Jagd ab. Köder erhöht die Chance auf den seltenen Silberhirsch; der Fund ist keine Pflicht.' });
-  const gateId = `r1-${p.depth - 2}-0`, fragmentIds = ['r1-2-0', 'r1-3-0'];
-  const fragmentCapacity = left.E + left.F + left.M;
-  const gateOk = left.E >= 1 && fragmentCapacity >= 3;
-  if (gateOk) {
-    reserve(gateId, ['E'], 'gate', 'Das Tor der Morgenröte');
-    fragmentIds.forEach((id, i) => reserve(id, ['E', 'M', 'F'], 'fragment', `Runenfragment ${i + 1}`));
-    node(`r1-${p.depth - 3}-0`).discovers = 'entrance';
-    node(gateId).discovers = 'passage';
-    node('secret-cache').special = 'treasure';
-    node('secret-cache').name = 'Die verborgene Schatzkammer';
-  }
-  quests.push({ id: 'gate', title: 'Ein geteiltes Licht', target: gateId, prerequisites: fragmentIds, compatible: gateOk, reason: gateOk ? '' : 'Fragmenttor nicht mit diesem Budget kompatibel.', description: 'Finde zwei Runenfragmente auf der versunkenen Straße und öffne das optionale Tor. Ein freier Pfad führt daran vorbei.' });
+  const huntContent = deck.monsters.find(entry => entry.name === deck.hunt);
+  const huntOk = reserve(huntId, ['H'], 'hunt', deck.hunt);
+  if (huntOk) Object.assign(node(huntId), huntContent, { type: 'H', special: 'hunt', name: deck.hunt });
+  quests.push({ id: 'hunt', title: `Track: ${deck.hunt}`, target: huntId, compatible: huntOk, reason: huntOk ? '' : 'Kein Hunt-Budget verfügbar.', description: `Track and resolve the ${deck.hunt} encounter. Bait improves the rare-result chance but does not guarantee it.` });
   const forageId = `${p.routes === 3 ? 'r2' : 'r0'}-3-0`;
-  const forageOk = reserve(forageId, ['F'], 'forage', 'Der Silberblatt-Garten');
-  quests.push({ id: 'forage', title: 'Kleine Wunder', target: forageId, compatible: forageOk, reason: forageOk ? '' : 'Kein Sammel-Budget verfügbar.', description: 'Sammle Silberblatt im Garten. Der Sammelauftrag ist auf seiner Route garantiert erfüllbar.' });
+  const forageContent = deck.cards.find(entry => entry.cardType === 'skill_check');
+  const forageOk = reserve(forageId, ['F'], 'forage', forageContent?.name || 'Exploration Check');
+  if (forageOk && forageContent) Object.assign(node(forageId), forageContent, { type: 'F', special: 'forage' });
+  quests.push({ id: 'forage', title: forageContent?.name || 'Explore the Area', target: forageId, compatible: forageOk, reason: forageOk ? '' : 'Kein Skill-Check-Budget verfügbar.', description: 'Complete an exploration skill check on its guaranteed route.' });
+  const gateId = `r1-${p.depth - 2}-0`, resourceIds = deck.secret.lockCost ? ['r1-2-0', 'r1-3-0'].slice(0, deck.secret.lockCost) : [];
+  const secretCapacity = TYPES.reduce((sum, type) => sum + left[type], 0);
+  const gateOk = left.E >= 1 && secretCapacity >= deck.secret.lockCost + 2;
+  if (gateOk) {
+    reserve(gateId, ['E'], 'gate', deck.secret.entranceName);
+    Object.assign(node(gateId), { description: deck.secret.entranceDescription, lockCost: deck.secret.lockCost, secretKind: deck.style === 'dungeon' ? 'gate' : 'trail', cardType: 'event', rarity: 'U' });
+    resourceIds.forEach((id, i) => {
+      reserve(id, ['E', 'M', 'F'], 'fragment', deck.secret.resourceNames[i]);
+      Object.assign(node(id), { description: `One of ${deck.secret.lockCost} pieces needed to open ${deck.secret.entranceName}.`, cardType: 'key', rarity: 'C' });
+    });
+    reserve('secret-cache', [deck.secret.vaultType, 'E', 'M', 'F', 'H'], 'treasure', deck.secret.vaultName);
+    const unique = deck.rareEncounters.find(entry => entry.name === deck.secret.vaultName);
+    Object.assign(node('secret-cache'), unique, { name: deck.secret.vaultName, description: deck.secret.vaultDescription, special: 'treasure', unique: true });
+    Object.assign(node(`r1-${p.depth - 3}-0`), { discovers: 'entrance', storyBeat: deck.secret.discoveryName });
+    node(gateId).discovers = 'passage';
+  }
+  quests.push({ id: 'gate', title: deck.secret.questTitle, target: gateId, prerequisites: resourceIds, compatible: gateOk, reason: gateOk ? '' : 'Geheimbegegnung nicht mit diesem Budget kompatibel.', description: deck.secret.lockCost ? `Find ${deck.secret.lockCost} ${deck.secret.resourceLabel.toLowerCase()}, open the side arm and discover ${deck.secret.vaultName}.` : `Discover the side trail and find ${deck.secret.vaultName}.` });
   // Weighted sampling without replacement preserves exact global counts and gives each route a focus.
   for (const n of slots) {
     if (!n.type) {
@@ -100,16 +109,21 @@ export function generate(input) {
       type ||= TYPES.find(t => left[t] > 0);
       n.type = type; left[type]--;
     }
-    n.name ||= NAMES[n.type][Math.floor(random() * NAMES[n.type].length)];
-    const encounter = rng(`${config.seed}|floor:${config.floor}|encounter|${config.runes.join(',')}|${n.id}|${GENERATOR_VERSION}`);
+    if (!n.name) {
+      const pool = contentPool(deck, n.type);
+      const content = pool[Math.floor(random() * pool.length)];
+      Object.assign(n, content);
+    }
+    const encounter = rng(`${config.seed}|${config.deck}|floor:${config.floor}|encounter|${config.runes.join(',')}|${n.id}|${GENERATOR_VERSION}`);
     n.outcome = { roll: encounter(), loot: 3 + Math.floor(encounter() * 6), herbs: 1 + Math.floor(encounter() * 3) };
   }
   node('start').name = 'Der Wegstein';
+  node('start').description = `${deck.name} begins here. ${deck.description}`;
   node('end').name = config.floor < p.floors ? 'Das Tor in die Tiefe' : 'Der Weg nach Hause';
   node('end').special = config.floor < p.floors ? 'descent' : 'exit';
-  const rumorRandom = rng(`${config.seed}|floor:${config.floor}|rumors|${GENERATOR_VERSION}`);
+  const rumorRandom = rng(`${config.seed}|${config.deck}|floor:${config.floor}|rumors|${GENERATOR_VERSION}`);
   const rumors = quests.filter(q => q.compatible && !node(q.target).secret).map(q => ({ id: q.target, rank: rumorRandom() })).sort((a, b) => a.rank - b.rank).map(r => r.id);
-  const result = { generatorVersion: GENERATOR_VERSION, config, ...graph, counts, weights, effects: effects(config.runes), quests, rumors };
+  const result = { generatorVersion: GENERATOR_VERSION, config, deck: structuredClone(deck), ...graph, counts, weights, effects: effects(config.runes), quests, rumors };
   validateGraph(result);
   return result;
 }
@@ -130,8 +144,9 @@ export function questSolvable(graph, quest) {
     const s = queue[i]; if (s.id === quest.target) return true;
     for (const e of graph.edges.filter(e => e.from === s.id)) {
       const n = byId.get(e.to);
-      if (n.special === 'gate' && s.parts < 2) continue;
-      const next = { id: n.id, parts: s.parts + (n.special === 'fragment' ? 1 : 0) - (n.special === 'gate' ? 2 : 0), bait: s.bait };
+      const lockCost = n.special === 'gate' ? (n.lockCost ?? 2) : 0;
+      if (s.parts < lockCost) continue;
+      const next = { id: n.id, parts: s.parts + (n.special === 'fragment' ? 1 : 0) - lockCost, bait: s.bait };
       const key = `${next.id}/${next.parts}/${next.bait}`;
       if (!seen.has(key)) { seen.add(key); queue.push(next); }
     }
