@@ -1,63 +1,78 @@
-# Prado · Waystone Map Lab v5
+# Prado · Waystone Map Lab v5.1
 
-Ein lokal spielbares Generatorlabor für Waystone-Abenteuer. Es verbindet Prados runenbasierten Deckbau, kreuzungsfreie Merge-/Split-Pfade nach dem Vorbild von Slay the Spire sowie Jagdgebiete mit Ködern und Gebiets-Lore.
+Prado Waystone Map Lab is a local, browser-based adventure generator. It combines Prado’s rune-driven deck building, Slay the Spire-style route topology, and Monster Hunter-inspired hunting grounds with bait and persistent area lore.
 
-Als realistische Beispiele sind **The Filthworks** und **Meadowland Wilds** enthalten. Die Namen und Decklisten stammen aus den offiziellen Prado-Seiten für [The Filthworks](https://www.pradotraveler.com/decks/131) und [Meadowland Wilds](https://www.pradotraveler.com/decks/124). Grafiken, Regeln und Zahlen des Labors sind eigenständige Prototypwerte.
+The demo includes two example decks:
 
-## Start
+- **The Filthworks** — a compact dungeon with valve seals, a locked sluice gate, a bypass, and a unique vault.
+- **Meadowland Wilds** — a more open wilderness with wider branches and a discoverable game trail.
 
-Voraussetzung: Node.js 22 oder neuer. Es gibt keine Laufzeitabhängigkeiten und kein `npm install`.
+## Run the demo
+
+Prerequisite: Node.js 22 or newer. There are no runtime dependencies and no `npm install` step.
 
 ```sh
+git clone https://github.com/LorenzSLH/prado-waystone-lab.git
+cd prado-waystone-lab
 node server.mjs
 ```
 
-Danach **http://localhost:4173** öffnen. Unter Windows kann auch `./start.ps1` verwendet werden.
+Open [http://localhost:4173](http://localhost:4173) in Chrome, Edge, or another modern browser. On Windows, `.start.ps1` starts the same local server and automatically uses Node from the PATH or the bundled Codex runtime when available.
 
-## Ausprobieren
+The server listens on `127.0.0.1` only. To use another port:
 
-1. Deck, drei Runen, Abenteuerlevel und Seed wählen und **Karte erzeugen** drücken.
-2. **Alle regulären Pfade zeigen** zeigt die gesamte Wegstruktur, hält Namen und Inhalte unentdeckter Orte jedoch verborgen.
-3. Einen erreichbaren Ort wählen und betreten. Bei einem Jagdgebiet kann vor dem Eintritt optional ein Köder eingesetzt werden.
-4. In The Filthworks liegen Valve Seals auf getrennten Wegen. Das Sluice Gate ist ein optionaler Seitenarm mit freier Umgehung und einzigartiger Vault.
-5. Ab Level 3 führen Minibosse in weitere Ebenen; der echte Endboss wartet auf der letzten Ebene.
-6. **Generator-Eigenschaften** öffnet den Editor für Arten, Karten, Runen, Platzierungsregeln, Jagdregeln und Startinventar.
-7. **Generierung ansehen** zeigt die neun deterministischen Schritte mit Karte, Budget und Entscheidungen vorwärts und rückwärts.
+```powershell
+$env:PORT = 4300
+node server.mjs
+```
 
-Profile und Spielstände liegen in getrennten `localStorage`-Einträgen und besitzen getrennte JSON-Importe/-Exporte. Ein Run-Export enthält den benutzten Profil-Snapshot und Hash und ist daher reproduzierbar. Beim ersten Start übernimmt v5 die Konfiguration aus v4, lässt den alten Speicherstand unangetastet und erzeugt die aktive Karte mit dem v5-Standardprofil neu.
+Then open `http://localhost:4300`.
 
-## Generatorregeln
+## Play and inspect the generator
 
-- Kartenarten sind dynamische Profildaten. Mitgeliefert werden Monster, Schrein, Sammelkarte, Eventkarte, Jagdgebiet und Falle.
-- Basiswahrscheinlichkeiten und Raritätsmischungen müssen jeweils 100 % ergeben. Auswahlgewichte steuern konkrete Karten innerhalb eines Pools.
-- Runen verändern Kartenanzahlen absolut. Ihr Nettowert kann zusätzliche Alternativen erzeugen oder optionale Knoten entfernen. Globale Prozentwerte wirken getrennt auf HP, Angriff, Leech, Heilung, Loot, Item-Rarity, Rare-Chance und Köder.
-- Level- und Tiefenfenster gelten für Arten und konkrete Karten. Unmögliche Konfigurationen werden mit Ursache blockiert.
-- Ressourcen und Türen verwenden generische `produces`-/`requires`-Verträge. Ressourcen liegen vor der Tür und bleiben gemeinsam erreichbar; eine Tür besitzt stets einen freien Alternativweg.
-- Wege kreuzen sich nicht, können zusammenlaufen und sich wieder teilen. Jeder reguläre Weg erreicht den Ebenenboss; die Wertspreizung vollständiger Wege beträgt höchstens drei Punkte.
-- Köder und Lore erhöhen Rare-/Unique-Gewichte, garantieren aber keinen seltenen Fund. Lore bleibt über Ebenen erhalten, Köder werden nicht während des Runs erzeugt, und Unique-Karten erscheinen höchstens einmal pro Abenteuer.
+1. Choose a deck, three runes, an adventure level, and a seed, then select **Generate map**.
+2. Enable **Show all regular routes** to see the complete route structure while keeping unknown locations’ contents hidden.
+3. Enter a reachable location. At a hunting ground, you can optionally spend bait before entering.
+4. From level 3 onward, minibosses guard earlier floors and the final boss appears on the last floor.
+5. Open **Generator properties** to edit card types, the card catalog, rune deltas, global modifiers, placement rules, hunting rules, and starting bait.
+6. Open **View generation** to step through the nine deterministic build phases and inspect each map snapshot.
 
-Die technische Idee, das Datenmodell, Formeln, Pipeline, Pseudocode, Integrationshinweise und Grenzen stehen in [docs/GENERATOR-HANDOFF.md](docs/GENERATOR-HANDOFF.md). Die Quellen zur Pfadstruktur sind die [Slay the Spire map-generation documentation](https://slaythespire.wiki.gg/wiki/Map_Generation), der [STS Map Oracle](https://github.com/Ru5ty0ne/sts_map_oracle) und die verlinkte [Steam-Analyse](https://steamcommunity.com/sharedfiles/filedetails/?id=2830078257).
+Profiles and runs are stored separately in browser `localStorage`. JSON exports include the profile snapshot and hash used by the run, so the map can be replayed from its seed and settings. The current v5.1 storage keys are separate from earlier German demo data.
 
-## Tests
+## Generator model
+
+- Card types are dynamic profile data. The default profile includes monsters, shrines, foraging cards, event cards, hunting grounds, and traps.
+- Type probabilities and rarity mixes must each total 100%. Selection weights choose concrete cards within eligible pools.
+- Runes apply absolute card-count deltas and global percentage modifiers for HP, attack, leech, healing, loot, item rarity, rare chance, and bait effectiveness.
+- Level and depth windows apply to both card types and individual cards. Invalid or impossible combinations are blocked with a specific error.
+- Generic resource contracts place producers before dependent gates and preserve an open bypass around locked side arms.
+- Routes remain cross-free, can merge, and can split again. Every regular route reaches the floor boss, and complete route values stay within the configured spread.
+- Hunting grounds reveal their monster only on entry. Bait and area lore improve rare/unique weights without guaranteeing a rare result; unique cards are limited across the full adventure.
+
+The full design, data model, formulas, pipeline, integration contract, examples, and known limits are documented in [docs/GENERATOR-HANDOFF.md](docs/GENERATOR-HANDOFF.md).
+
+## Development
 
 ```sh
 node --test
 npm run check
 ```
 
-Die Suite prüft mehr als 11.200 Kartenvarianten sowie dynamische Typen, exakte Budgets, positive und negative Runen-Nettoänderungen, Platzierungsfenster, Ressourcenabhängigkeiten, Pfadwerte, Jagd/Lore/Köder, das Unique-Limit über mehrere Ebenen, Replay, Profil-/Session-JSON und v4-Migration. Der visuelle Prüfstand steht in [docs/VALIDATION.md](docs/VALIDATION.md).
+The test suite covers more than 11,200 generated maps, dynamic types, exact budgets, positive and negative rune totals, placement windows, dependency solving, path balancing, hunting/lore/bait, replay, profile/session JSON, v4 migration, and the English UI surface. Browser validation is recorded in [docs/VALIDATION.md](docs/VALIDATION.md).
 
-## Struktur
+## Repository layout
 
 ```text
-src/profile.js      Versioniertes GeneratorProfile und Validierung
-src/config.js       Run-Konfiguration und Runeneffekte
-src/generation.js   Budgets, Topologie, Inhalt, Trace und Invarianten
-src/model.js        Spielzustand, Jagd, Lore, Replay und Serialisierung
-src/map.js          Spielkarte und Stepper-Karten
-src/app.js          Editor, Stepper und Spieloberfläche
-src/styles.css      Responsive Darstellung
-tests/              Generator- und Zustandsprüfungen
+src/profile.js      Versioned GeneratorProfile and validation
+src/config.js       Run configuration and rune effects
+src/generation.js   Budgets, topology, content, trace, and invariants
+src/model.js        State machine, hunting, lore, replay, and serialization
+src/map.js          Playable map and generation-step snapshots
+src/app.js          Editor, stepper, and game interface
+src/styles.css      Responsive styling
+tests/              Generator, model, expedition, and language tests
+server.mjs          Local static server
+REQUIREMENTS.md     Runtime and deployment requirements
 ```
 
-Das Repository ist ein Generator- und UX-Prototyp. Begegnungen simulieren Erfolg; Kampf, GPS, Login und Backend sind nicht enthalten.
+This is a generator and UX prototype. Encounters simulate completion and rewards; combat, GPS, login, backend persistence, and production Prado integration are outside the scope of this repository.
