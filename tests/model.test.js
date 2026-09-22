@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_CONFIG, LEVELS } from '../src/config.js';
-import { newSession, dispatch, resetSession, importSession, accessibility, visibility, getNode, huntChance } from '../src/model.js';
+import { newSession, dispatch, resetSession, importSession, migrateV4Config, accessibility, visibility, getNode, huntChance } from '../src/model.js';
 import { renderMap } from '../src/map.js';
 
 const make = (overrides = {}) => newSession({ ...DEFAULT_CONFIG, ...overrides });
 const view = (s, changes) => dispatch(s, { type: 'view', view: { ...s.state.view, ...changes } });
-function move(s, id, bait = false) { s = dispatch(s, { type: 'enter', id }); if (s.state.status === 'encounter') s = dispatch(s, { type: 'resolve', bait }); return s; }
+function move(s, id, bait = false) { s = dispatch(s, { type: 'enter', id, bait }); if (s.state.status === 'encounter') s = dispatch(s, { type: 'resolve' }); return s; }
 function pathTo(graph, from, target) {
   const queue = [[from]], seen = new Set([from]);
   for (const path of queue) for (const e of graph.edges.filter(edge => edge.from === path.at(-1))) {
@@ -69,7 +69,7 @@ test('locked gate has an open bypass; two compatible fragments unlock it and cos
   s = travel(s, s.graph.plan.discoveryId);
   const gate = s.graph.quests.find(q => q.id === 'gate').target;
   assert.equal(s.state.inventory.fragments, 2);
-  const missing = structuredClone(s); missing.state.inventory.fragments = 1;
+  const missing = structuredClone(s); missing.state.inventory.fragments = 1; missing.state.inventory.resources['valve-seal'] = 1;
   assert.equal(accessibility(missing.graph, missing.state, gate), 'locked');
   assert.throws(() => dispatch(missing, { type: 'enter', id: gate }));
   const bypass = s.graph.edges.filter(e => e.from === s.state.currentNodeId).map(e => getNode(s.graph, e.to)).find(n => n.special !== 'gate');
@@ -128,11 +128,14 @@ test('bait consumed once, chance increased but never guaranteed, deterministic o
   for (let i = 0; i < 40; i++) {
     let s = view(make({ seed: `bait-${i}` }), { infinite: true });
     s = travel(s, 'r0-6-0');
-    s = dispatch(s, { type: 'enter', id: 'r0-7-0' });
+    s = dispatch(s, { type: 'enter', id: 'r0-7-0', bait: true });
     const before = s.state.inventory.bait;
-    const done = dispatch(s, { type: 'resolve', bait: true });
-    assert.equal(done.state.inventory.bait, before - 1);
-    assert.throws(() => dispatch(done, { type: 'resolve', bait: true }));
+    const loreBefore = s.state.lore.filthworks;
+    assert.equal(before, 1);
+    const done = dispatch(s, { type: 'resolve' });
+    assert.equal(done.state.inventory.bait, before);
+    assert.equal(done.state.lore.filthworks, loreBefore + 1);
+    assert.throws(() => dispatch(done, { type: 'resolve' }));
     assert.deepEqual(importSession(JSON.stringify(done)).state, done.state);
     const result = done.state.resolvedEncounters['r0-7-0'];
     if (result.unique) unique++; else normal++;
@@ -140,6 +143,10 @@ test('bait consumed once, chance increased but never guaranteed, deterministic o
     assert.ok(huntChance(s.graph, true) < 1);
   }
   assert.ok(unique && normal);
+});
+test('version 4 migration keeps configuration and rebuilds progress', () => {
+  assert.deepEqual(migrateV4Config({ schemaVersion: 4, config: DEFAULT_CONFIG }), DEFAULT_CONFIG);
+  assert.equal(migrateV4Config({ schemaVersion: 3, config: DEFAULT_CONFIG }), null);
 });
 test('energy limit blocks entry; refill and explicit infinite mode work', () => {
   let s = make({ level: 5, descent: false });

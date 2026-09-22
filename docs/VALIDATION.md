@@ -1,29 +1,34 @@
 # Prüfprotokoll
 
-Stand: 21. September 2026 · Generator 4.0.0 · Node.js 24.19.0
+Stand: 22. September 2026 · Generator 5.0.0
 
 ## Automatisiert
 
-`node --test`: 20 Tests erfolgreich, einschließlich einer Matrix aus **11.200 Karten**. Beide Deckprofile, alle 20 Dreierkombinationen des Runenkatalogs, Level 1–5, Seeds `matrix-0` bis `matrix-19`, jeweils Einzelebenen- und Mehr­ebenenmodus sowie jede resultierende Ebene.
+`node --test` prüft beide Waystone-Decks, alle 20 Dreierkombinationen der Standardrunen, Level 1–5, 20 Seeds, Einzel- und Mehr­ebenenmodus sowie jede resultierende Ebene. Allein diese Matrix enthält 11.200 Karten. Hinzu kommen Modell- und Integritätstests.
 
-Vollständige Modell-Runs über alle Hauptwege und beide Varianten des Geheimarms geprüft. Jeder Weg passiert denselben verpflichtenden Ebenenboss. Im Filthworks öffnen zwei Valve Seals das Sluice Gate; in Meadowland wird der Game Trail ohne Schlüssel zugänglich. Mehrere Ebenen, Mini- und Endboss, Inventarübernahme, Reset und deterministisches Replay sind geprüft.
+Geprüfte Invarianten:
 
-## Browserprüfung
+- gerichteter, vollständig erreichbarer Graph; jeder Weg erreicht denselben Pflichtboss;
+- ausschließlich benachbarte Tiefen, keine geometrisch kreuzenden Kanten;
+- Merge-/Split-Abschnitte, freie Torumgehung und maximal drei Punkte Pfadwertspreizung;
+- exakte Largest-Remainder-Budgets, dynamische Typen sowie positive und negative Runen-Nettoänderungen;
+- Level- und Tiefenfenster, Ressourcen vor Türen und gemeinsam lösbare Abhängigkeiten;
+- deterministische Raritäts-/Kartenauswahl und höchstens ein Unique pro Abenteuer;
+- Köderverbrauch beim Eintritt, Lore-Zuwachs beim Abschluss und Erhalt über Ebenen;
+- identischer Stepper-Endzustand und Spielgraph;
+- Profil- und Session-JSON, Replay, Manipulationsschutz und v4-Konfigurationsmigration.
 
-Mit Chrome 153 headless geprüft:
+## Chrome-Prüfung
 
-- [x] The Filthworks bei 1440 × 1000 und Meadowland Wilds bei 390 × 844, Level 1 mit Gerüchten und sichtbaren regulären Pfaden.
-- [x] Keine Browser-Konsolenfehler, kein horizontaler Seitenüberlauf bei 390 px.
-- [x] Dungeon- und Wildnisprofil zeigen unterschiedliche Wegabstände, Verzweigungsdichte, Kartengrafik und Ortsinhalte.
-- [x] Unbekannte reguläre Orte zeigen nur neutrale Symbole; Bossname und Geheimknoten fehlen zu Beginn.
-- [x] Mobiles Detailpanel öffnet über einem direkt erreichbaren Ort und zeigt die Betreten-Aktion vollständig.
-- [x] Vollständiger Run über zwei Fragmente, Entdeckungsort, Geheimtor, Schatzkammer, Miniboss und Ausgang.
-- [x] Geheimtor vor Entdeckung sichtbar: 0; nach Entdeckungsort: 1. Schatzkammer vor Torabschluss sichtbar: 0; danach: 1.
-- [x] Level 3 bis zum Abstieg gespielt; das Tor öffnet Ebene 2/2 und zeigt dort den Endboss als Ebenenziel.
-- [x] Abschlussübersicht erscheint nach dem Boss und Ausgang.
+Chrome wurde headless bei 1440 × 1000 und 390 × 844 geprüft.
 
-Die automatisierten Modelltests decken ergänzend Reload bei offenem Encounter, Export/Import, Reset, reguläre Alternativrouten, Mehr­ebenen-Replay und nicht garantierte Köderergebnisse ab. Tastaturaktionen werden in der Kartenimplementierung und Markupprüfung berücksichtigt; ein vollständiger manueller Screenreader-Test ist noch nicht erfolgt.
+- [x] Keine Browser-Konsolenfehler.
+- [x] Kein horizontaler Seitenüberlauf bei 390 px.
+- [x] Spielkarte, Pfadansicht und mobile Bedienelemente skalieren vollständig in den Viewport.
+- [x] Generator-Eigenschaften öffnen mit Kartenarten, Katalog, Runenmatrix, Regeln und Profil-JSON.
+- [x] Generation-Stepper öffnet, navigiert vorwärts/rückwärts und zeigt die jeweilige Kartensnapshot-Grafik.
+- [x] Ein gültig bearbeitetes Profil kann angewendet werden; ungültige Wahrscheinlichkeitssummen werden verständlich abgelehnt.
+- [x] The Filthworks und Meadowland Wilds verwenden getrennte Dungeon-/Wildnisstrukturen.
+- [x] Unbekannte reguläre Orte zeigen nur neutrale Symbole; geheime Knoten bleiben bis zur Entdeckung verborgen.
 
-Geometrische Kreuzungsfreiheit, mindestens 70 SVG-Einheiten Abstand der Trefferflächen, Inhaltsfreiheit unbekannter Pfadknoten und die Abwesenheit interaktiver Geheimknoten vor ihrer Entdeckung werden bereits ohne Browser geprüft. Die minimale SVG-Skalierung ergibt mindestens 44 CSS-Pixel große Knoten-Trefferflächen.
-
-Version 4 prüft zusätzlich partielle Zusammenführungen mit späterer Aufteilung, räumlich getrennte Schlüsselressourcen, gleich gewichtete Alternativen, höchstens drei Wertpunkte Unterschied zwischen vollständigen regulären Pfaden sowie absolute Runenänderungen an fünf Kartenbudgets.
+Die automatisierten Modelltests übernehmen die tieferen Spielabläufe: vollständige Runs, Tore, Ressourcenverbrauch, Jagden, mehrere Ebenen, Mini-/Endbossfolge, Export/Import und identisches Replay. Ein manueller Screenreader-Test ist nicht Teil dieses Prototyp-Prüfstands.

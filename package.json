@@ -1,9 +1,9 @@
 {
   "name": "prado-waystone-lab",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "private": true,
   "type": "module",
   "description": "Deterministic, local-first adventure map playground",
   "engines": { "node": ">=22" },
-  "scripts": { "start": "node server.mjs", "dev": "node server.mjs", "test": "node --test", "check": "node --check src/app.js && node --check src/generation.js && node --check src/model.js" }
+  "scripts": { "start": "node server.mjs", "dev": "node server.mjs", "test": "node --test", "check": "node --check src/app.js && node --check src/profile.js && node --check src/generation.js && node --check src/model.js" }
 }

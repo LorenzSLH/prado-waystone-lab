@@ -1,9 +1,14 @@
 import { SCHEMA_VERSION, GENERATOR_VERSION, LEVELS, DEFAULT_VIEW, floorProfile } from './config.js';
-import { generate, reachable } from './generation.js';
+import { generate, reachable, rng } from './generation.js';
+import { DEFAULT_PROFILE, profileHash, validateProfile } from './profile.js';
 
-export const getNode = (g, id) => g.nodes.find(n => n.id === id);
-export function initialState(graph, view = DEFAULT_VIEW) {
-  const state = { currentNodeId: 'start', visitedNodeIds: ['start'], knownNodes: [], knownEdges: [], knownRumors: [], discoveredSecrets: [], energy: 12, inventory: { fragments: 0, bait: 2, herbs: 0, loot: 0, uniques: 0 }, questStates: {}, resolvedEncounters: {}, status: 'exploring', view: { ...view } };
+export const getNode = (graph, id) => graph.nodes.find(node => node.id === id);
+export function initialState(graph, profile = DEFAULT_PROFILE, view = DEFAULT_VIEW) {
+  const state = {
+    currentNodeId: 'start', visitedNodeIds: ['start'], knownNodes: [], knownEdges: [], knownRumors: [], discoveredSecrets: [], energy: 12,
+    inventory: { fragments: 0, resources: {}, bait: profile.startInventory.bait, herbs: 0, loot: 0, uniques: 0 },
+    lore: { [graph.config.deck]: 0 }, huntLog: [], uniqueCardIds: [...graph.generatedUniqueCardIds], pendingHunt: null, questStates: {}, resolvedEncounters: {}, status: 'exploring', view: { ...view },
+  };
   discover(graph, state); updateQuests(graph, state); return state;
 }
 function validateView(view) {
@@ -13,25 +18,24 @@ export function secretAvailable(state, node) { return !node.secret || state.disc
 export function discover(graph, state) {
   const known = new Set(state.knownNodes), edges = new Set(state.knownEdges), radius = state.view.preview || LEVELS[graph.config.level].preview;
   const queue = [[state.currentNodeId, 0]], distance = new Map([[state.currentNodeId, 0]]);
-  for (let i = 0; i < queue.length; i++) {
-    const [id, d] = queue[i]; known.add(id);
-    if (d >= radius) continue;
-    for (const e of graph.edges.filter(e => e.from === id)) {
-      if (!secretAvailable(state, getNode(graph, e.to))) continue;
-      edges.add(e.id);
-      if (!distance.has(e.to)) { distance.set(e.to, d + 1); queue.push([e.to, d + 1]); }
+  for (let index = 0; index < queue.length; index++) {
+    const [id, depth] = queue[index]; known.add(id);
+    if (depth >= radius) continue;
+    for (const edge of graph.edges.filter(item => item.from === id)) {
+      if (!secretAvailable(state, getNode(graph, edge.to))) continue;
+      edges.add(edge.id);
+      if (!distance.has(edge.to)) { distance.set(edge.to, depth + 1); queue.push([edge.to, depth + 1]); }
     }
   }
   if (state.view.fog === 'off') {
-    graph.nodes.filter(n => secretAvailable(state, n)).forEach(n => known.add(n.id));
-    graph.edges.filter(e => secretAvailable(state, getNode(graph, e.from)) && secretAvailable(state, getNode(graph, e.to))).forEach(e => edges.add(e.id));
+    graph.nodes.filter(node => secretAvailable(state, node)).forEach(node => known.add(node.id));
+    graph.edges.filter(edge => secretAvailable(state, getNode(graph, edge.from)) && secretAvailable(state, getNode(graph, edge.to))).forEach(edge => edges.add(edge.id));
   }
   state.knownNodes = [...known].sort(); state.knownEdges = [...edges].sort();
   if (state.view.fog === 'rumors') state.knownRumors = [...new Set([...state.knownRumors, ...graph.rumors.slice(0, state.view.rumorCount)])].sort();
 }
 export function visibility(graph, state, id) {
-  const node = getNode(graph, id);
-  if (!node) return 'hidden';
+  const node = getNode(graph, id); if (!node) return 'hidden';
   if (state.view.debug) return 'revealed';
   if (!secretAvailable(state, node)) return 'hidden';
   if (state.knownNodes.includes(id)) return 'revealed';
@@ -39,98 +43,118 @@ export function visibility(graph, state, id) {
   if (state.view.paths) return 'unknown';
   return 'hidden';
 }
+function hasRequirement(state, node) { const requirement = node.requires; return !requirement || (state.inventory.resources[requirement.resourceId] || 0) >= requirement.amount; }
 export function accessibility(graph, state, id) {
-  const n = getNode(graph, id);
+  const node = getNode(graph, id);
   if (id === state.currentNodeId) return 'current';
   if (state.visitedNodeIds.includes(id)) return 'visited';
-  if (!n || !secretAvailable(state, n)) return 'undiscovered';
+  if (!node || !secretAvailable(state, node)) return 'undiscovered';
   if (!reachable(graph, state.currentNodeId).has(id)) return 'missed';
-  if (graph.edges.some(e => e.from === state.currentNodeId && e.to === id)) return n.special === 'gate' && state.inventory.fragments < (n.lockCost ?? 2) ? 'locked' : 'next';
+  if (graph.edges.some(edge => edge.from === state.currentNodeId && edge.to === id)) return !hasRequirement(state, node) ? 'locked' : 'next';
   return 'future';
 }
 export function updateQuests(graph, state) {
   const future = reachable(graph, state.currentNodeId);
-  for (const q of graph.quests) {
-    state.questStates[q.id] = !q.compatible ? 'incompatible' : state.resolvedEncounters[q.target] ? 'complete' : !future.has(q.target) ? 'missed' : 'active';
-  }
+  for (const quest of graph.quests) state.questStates[quest.id] = !quest.compatible ? 'incompatible' : state.resolvedEncounters[quest.target] ? 'complete' : !future.has(quest.target) ? 'missed' : 'active';
 }
-export function huntChance(graph, useBait) {
-  const rareWeight = .15 * graph.effects.rare.multiplier * (useBait ? 3 * graph.effects.bait.multiplier : 1);
-  return rareWeight / (.85 + rareWeight);
+export function huntChance(graph, useBait, lore = 0) {
+  const rules = graph.huntingRules || DEFAULT_PROFILE.huntingRules;
+  const loreMultiplier = Math.min(rules.loreMultiplierCap, 1 + lore * rules.loreStep);
+  const baitMultiplier = useBait ? rules.baitRareMultiplier * graph.effects.bait.multiplier : 1;
+  const baseRare = ((graph.huntRarityWeights?.R || 0) + (graph.huntRarityWeights?.U || 0)) / 100;
+  const rareWeight = baseRare * graph.effects.rare.multiplier * loreMultiplier * baitMultiplier;
+  return rareWeight / (Math.max(.0001, 1 - baseRare) + rareWeight);
 }
-export function transition(graph, original, action) {
+export function rollHunt(graph, profile, state, node, useBait) {
+  const lore = state.lore[graph.config.deck] || 0, chance = huntChance(graph, useBait, lore), usedUnique = new Set(state.uniqueCardIds || []);
+  const monsters = profile.cards.filter(card => card.deck === graph.config.deck && card.typeId === 'M' && !(card.rarity === 'U' && (usedUnique.has(card.id) || usedUnique.size >= profile.huntingRules.uniquePerAdventure)));
+  const rare = monsters.filter(card => card.rarity !== 'C'), common = monsters.filter(card => card.rarity === 'C');
+  const random = rng(`${graph.config.seed}|${graph.config.floor}|hunt|${node.id}|${lore}|${useBait}|${state.huntLog.length}|${graph.profileHash}`);
+  let pool;
+  if (random() < chance && rare.length) {
+    const rareWeights = graph.huntRarityWeights || { R: 95, U: 5 }, unique = rare.filter(card => card.rarity === 'U'), ordinary = rare.filter(card => card.rarity === 'R');
+    const uniqueRoll = unique.length && random() < rareWeights.U / Math.max(1, rareWeights.R + rareWeights.U); pool = uniqueRoll ? unique : ordinary.length ? ordinary : unique;
+  } else pool = common.length ? common : monsters;
+  let roll = random() * pool.reduce((sum, card) => sum + card.selectionWeight, 0), selected = pool[0];
+  for (const card of pool) if ((roll -= card.selectionWeight) < 0) { selected = card; break; }
+  return { nodeId: node.id, cardId: selected.id, name: selected.name, rarity: selected.rarity, bait: useBait, loreBefore: lore, rareChance: chance };
+}
+export function transition(graph, profile, original, action) {
   if (!action || typeof action.type !== 'string') throw Error('Ungültige Aktion.');
-  const s = structuredClone(original), current = getNode(graph, s.currentNodeId);
+  const state = structuredClone(original), current = getNode(graph, state.currentNodeId);
   switch (action.type) {
-    case 'reset': return initialState(graph, s.view);
-    case 'view': validateView(action.view); s.view = { ...action.view }; discover(graph, s); break;
-    case 'energy': if (s.energy > 99980) throw Error('Testenergie-Limit erreicht.'); s.energy += 20; break;
+    case 'reset': return initialState(graph, profile, state.view);
+    case 'view': validateView(action.view); state.view = { ...action.view }; discover(graph, state); break;
+    case 'energy': if (state.energy > 99980) throw Error('Testenergie-Limit erreicht.'); state.energy += 20; break;
     case 'enter': {
-      const n = getNode(graph, action.id);
-      if (s.status !== 'exploring') throw Error('Schließe zuerst die aktuelle Begegnung ab.');
-      if (!n || accessibility(graph, s, n.id) !== 'next') throw Error('Dieser Ort ist nicht direkt betretbar.');
-      const cost = n.kind === 'encounter' ? 1 : 0;
-      if (s.energy < cost && !s.view.infinite) throw Error('Zu wenig Energie. Fülle im Labor Testenergie nach.');
-      if (!s.view.infinite) s.energy -= cost;
-      if (n.special === 'gate') s.inventory.fragments -= n.lockCost ?? 2;
-      s.currentNodeId = n.id; s.visitedNodeIds.push(n.id);
-      s.status = n.kind === 'end' ? (graph.config.floor < floorProfile(graph.config).floors ? 'floor-cleared' : 'finished') : 'encounter';
-      discover(graph, s); break;
+      const node = getNode(graph, action.id), useBait = Boolean(action.bait);
+      if (state.status !== 'exploring') throw Error('Schließe zuerst die aktuelle Begegnung ab.');
+      if (!node || accessibility(graph, state, node.id) !== 'next') throw Error('Dieser Ort ist nicht direkt betretbar.');
+      if (useBait && (node.behavior !== 'hunt' || state.inventory.bait < 1)) throw Error('Kein passender Köder verfügbar.');
+      const cost = node.kind === 'encounter' ? 1 : 0;
+      if (state.energy < cost && !state.view.infinite) throw Error('Zu wenig Energie. Fülle im Labor Testenergie nach.');
+      if (!state.view.infinite) state.energy -= cost;
+      if (node.requires?.consume) { state.inventory.resources[node.requires.resourceId] -= node.requires.amount; state.inventory.fragments = Math.max(0, state.inventory.fragments - node.requires.amount); }
+      if (useBait) state.inventory.bait--;
+      state.currentNodeId = node.id; state.visitedNodeIds.push(node.id);
+      state.pendingHunt = node.behavior === 'hunt' ? rollHunt(graph, profile, state, node, useBait) : null;
+      state.status = node.kind === 'end' ? (graph.config.floor < floorProfile(graph.config).floors ? 'floor-cleared' : 'finished') : 'encounter';
+      discover(graph, state); break;
     }
     case 'resolve': {
-      if (s.status !== 'encounter' || s.resolvedEncounters[current.id]) throw Error('Diese Begegnung ist bereits abgeschlossen.');
-      if (typeof action.bait !== 'boolean') throw Error('Köderwahl ist ungültig.');
-      if (action.bait && (current.type !== 'W' || s.inventory.bait < 1)) throw Error('Kein passender Köder verfügbar.');
-      if (action.bait) s.inventory.bait--;
-      const mods = graph.effects, out = current.outcome;
-      const fragmentBonus = current.special === 'fragment' ? Math.round(10 * mods.fragment.multiplier) : 0;
+      if (state.status !== 'encounter' || state.resolvedEncounters[current.id]) throw Error('Diese Begegnung ist bereits abgeschlossen.');
+      const hunt = state.pendingHunt?.nodeId === current.id ? state.pendingHunt : null, mods = graph.effects, outcome = current.outcome;
+      const fragmentBonus = current.produces ? Math.round(10 * mods.fragment.multiplier) : 0;
       const specialBonus = current.special === 'treasure' ? 25 : current.special === 'boss' ? 40 : current.special === 'miniboss' ? 15 : 0;
-      const loot = Math.round(out.loot * (current.type === 'M' ? mods.loot.multiplier : 1)) + fragmentBonus + specialBonus;
-      const herbs = current.type === 'F' ? Math.max(1, Math.round(out.herbs * mods.forage.multiplier)) : 0;
-      const unique = current.type === 'W' && out.roll < huntChance(graph, action.bait);
-      s.inventory.loot += loot; s.inventory.herbs += herbs; s.inventory.uniques += unique ? 1 : 0;
-      if (current.special === 'fragment') s.inventory.fragments++;
-      s.resolvedEncounters[current.id] = { loot, herbs, unique, bait: action.bait, fragment: current.special === 'fragment', fragmentBonus };
-      if (current.discovers && !s.discoveredSecrets.includes(current.discovers)) s.discoveredSecrets.push(current.discovers);
-      s.status = 'exploring'; break;
+      const loot = Math.round(outcome.loot * (current.type === 'M' || hunt ? mods.loot.multiplier : 1)) + fragmentBonus + specialBonus;
+      const herbs = current.type === 'F' ? Math.max(1, Math.round(outcome.herbs * mods.forage.multiplier)) : 0;
+      state.inventory.loot += loot; state.inventory.herbs += herbs;
+      if (current.produces) { state.inventory.resources[current.produces.resourceId] = (state.inventory.resources[current.produces.resourceId] || 0) + current.produces.amount; state.inventory.fragments += current.produces.amount; }
+      if (hunt) { state.lore[graph.config.deck] = (state.lore[graph.config.deck] || 0) + 1; state.huntLog.push(hunt); if (hunt.rarity === 'U') { state.inventory.uniques++; state.uniqueCardIds.push(hunt.cardId); } }
+      else if (current.rarity === 'U') state.inventory.uniques++;
+      state.resolvedEncounters[current.id] = { loot, herbs, unique: hunt?.rarity === 'U' || current.rarity === 'U', bait: Boolean(hunt?.bait), fragment: Boolean(current.produces), fragmentBonus, hunt };
+      if (current.discovers && !state.discoveredSecrets.includes(current.discovers)) state.discoveredSecrets.push(current.discovers);
+      state.pendingHunt = null; state.status = 'exploring'; break;
     }
     default: throw Error('Unbekannte Aktion.');
   }
-  discover(graph, s); updateQuests(graph, s); return s;
+  discover(graph, state); updateQuests(graph, state); return state;
 }
-export function newSession(config) {
-  const graph = generate({ ...config, floor: 1 });
-  return { schemaVersion: SCHEMA_VERSION, generatorVersion: GENERATOR_VERSION, config: graph.config, graph, state: initialState(graph), completedFloors: [], actions: [] };
+export function newSession(config, suppliedProfile = DEFAULT_PROFILE) {
+  const profile = validateProfile(suppliedProfile), graph = generate({ ...config, floor: 1 }, profile);
+  return { schemaVersion: SCHEMA_VERSION, generatorVersion: GENERATOR_VERSION, profile, profileHash: profileHash(profile), config: graph.config, graph, state: initialState(graph, profile), completedFloors: [], generatedUniqueCardIds: [...graph.generatedUniqueCardIds], actions: [] };
 }
 export function dispatch(session, action) {
   if (session.actions.length >= 10000) throw Error('Aktionslimit erreicht. Bitte den Run zurücksetzen.');
   let next;
   if (action.type === 'descend') {
     if (session.state.status !== 'floor-cleared' || session.graph.config.floor >= floorProfile(session.graph.config).floors) throw Error('Das Abstiegstor ist noch nicht offen.');
-    const graph = generate({ ...session.graph.config, floor: session.graph.config.floor + 1 });
-    const state = initialState(graph, session.state.view);
-    state.inventory = structuredClone(session.state.inventory); state.energy = session.state.energy;
-    const archive = { graph: session.graph, state: session.state };
-    next = { ...session, graph, state, completedFloors: [...session.completedFloors, archive] };
+    const unavailable = [...new Set([...session.generatedUniqueCardIds, ...(session.state.uniqueCardIds || [])])];
+    const graph = generate({ ...session.graph.config, floor: session.graph.config.floor + 1 }, session.profile, { usedUniqueCardIds: unavailable });
+    const state = initialState(graph, session.profile, session.state.view); state.inventory = structuredClone(session.state.inventory); state.energy = session.state.energy; state.lore = structuredClone(session.state.lore); state.huntLog = structuredClone(session.state.huntLog); state.uniqueCardIds = [...new Set([...unavailable, ...graph.generatedUniqueCardIds])];
+    next = { ...session, graph, state, completedFloors: [...session.completedFloors, { graph: session.graph, state: session.state }], generatedUniqueCardIds: [...new Set([...session.generatedUniqueCardIds, ...graph.generatedUniqueCardIds])] };
   } else if (action.type === 'reset') {
-    next = newSession(session.config);
-    next.state = initialState(next.graph, session.state.view);
-  } else next = { ...session, state: transition(session.graph, session.state, action) };
+    next = newSession(session.config, session.profile); next.state = initialState(next.graph, session.profile, session.state.view);
+  } else { const state = transition(session.graph, session.profile, session.state, action); next = { ...session, state, generatedUniqueCardIds: [...new Set([...session.generatedUniqueCardIds, ...(state.uniqueCardIds || [])])] }; }
   return { ...next, actions: [...session.actions, structuredClone(action)] };
 }
-export function resetSession(session) {
-  return dispatch(session, { type: 'reset' });
-}
-const canonical = v => JSON.stringify(v && typeof v === 'object' ? Array.isArray(v) ? v.map(x => JSON.parse(canonical(x))) : Object.fromEntries(Object.keys(v).sort().map(k => [k, JSON.parse(canonical(v[k]))])) : v);
+export function resetSession(session) { return dispatch(session, { type: 'reset' }); }
+const normalized = value => value && typeof value === 'object' ? Array.isArray(value) ? value.map(item => item === undefined ? null : normalized(item)) : Object.fromEntries(Object.keys(value).filter(key => value[key] !== undefined).sort().map(key => [key, normalized(value[key])])) : value;
+const canonical = value => JSON.stringify(normalized(value));
 export function importSession(text) {
   if (typeof text !== 'string' || text.length > 5_000_000) throw Error('Datei ist zu groß (maximal 5 MB).');
-  let data;
-  try { data = JSON.parse(text); } catch { throw Error('Die Datei enthält kein gültiges JSON.'); }
+  let data; try { data = JSON.parse(text); } catch { throw Error('Die Datei enthält kein gültiges JSON.'); }
   if (!data || data.schemaVersion !== SCHEMA_VERSION || data.generatorVersion !== GENERATOR_VERSION) throw Error('Diese Speicherstand-Version wird nicht unterstützt.');
-  if (!data.graph || !Array.isArray(data.actions) || data.actions.length > 10000) throw Error('Unvollständiger Speicherstand.');
-  let replay = newSession(data.config);
+  if (!data.graph || !data.profile || profileHash(validateProfile(data.profile)) !== data.profileHash || !Array.isArray(data.actions) || data.actions.length > 10000) throw Error('Unvollständiger oder veränderter Speicherstand.');
+  let replay = newSession(data.config, data.profile);
   for (const action of data.actions) replay = dispatch(replay, action);
-  if (canonical(replay.graph) !== canonical(data.graph)) throw Error('Die Karte stimmt nicht mit Seed und Generatorversion überein.');
-  if (canonical(replay.state) !== canonical(data.state) || canonical(replay.completedFloors) !== canonical(data.completedFloors) || canonical(replay.config) !== canonical(data.config)) throw Error('Der Spielstand stimmt nicht mit dem Aktionsverlauf überein.');
+  if (canonical(replay.graph) !== canonical(data.graph) || canonical(replay.state) !== canonical(data.state) || canonical(replay.completedFloors) !== canonical(data.completedFloors) || canonical(replay.config) !== canonical(data.config)) throw Error('Der Spielstand stimmt nicht mit Seed, Profil und Aktionsverlauf überein.');
   return replay;
+}
+export function migrateV4Config(value) {
+  let data = value;
+  if (typeof value === 'string') { try { data = JSON.parse(value); } catch { return null; } }
+  if (!data || data.schemaVersion !== 4 || !data.config) return null;
+  const { seed, level, deck, runes, descent } = data.config;
+  return { seed, level, deck, runes, descent, floor: 1 };
 }

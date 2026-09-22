@@ -8,6 +8,7 @@ export const paths = {
   forage: '<path d="M16 29V14M16 21C4 24 3 14 4 10c8 0 12 4 12 11Zm0-5C15 6 22 3 28 4c0 8-4 12-12 12Z"/><path d="m8 15 8 6m6-12-6 7"/>',
   hunt: '<path d="m12 18-5-5-3-6m3 6-5 1m8 2 1-8m9 10 5-5 3-6m-3 6 5 1m-8 2-1-8M11 18h10l-2 9-3 3-3-3Z"/><path d="m14 22 2 1 2-1"/>',
   event: '<path d="m16 2 4 10 10 4-10 4-4 10-4-10-10-4 10-4Z"/><path d="m25 3 1 3 3 1-3 1-1 3-1-3-3-1 3-1Z"/>',
+  trap: '<path d="M4 24 16 5l12 19Z"/><path d="m10 22 4-7 2 5 3-8 3 10M8 27h16"/>',
   fragment: '<path d="m17 2 10 10-8 17-12-7 3-14Z"/><path d="m17 2-1 13 11-3M7 22l9-7 3 14m-9-21 6 7"/>',
   gate: '<path d="M5 29V13C5 0 27 0 27 13v16M10 29V14c0-9 12-9 12 0v15M3 29h26M5 13h5m12 0h5M9 5l4 5m10-5-4 5M16 3v5"/><path d="m16 15 3 5-3 5-3-5Z"/>',
   camp: '<path d="m16 3-13 23h26ZM16 12l-6 14m6-14 6 14M4 30h24"/><path d="m11 3 5 7 5-7"/>',
@@ -20,4 +21,4 @@ export const paths = {
 export function icon(name, cls = '', size = 24) {
   return `<svg class="icon ${cls}" width="${size}" height="${size}" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.event}</svg>`;
 }
-export function nodeIcon(n) { return n.kind === 'start' ? 'waystone' : n.special === 'descent' ? 'gate' : n.kind === 'end' ? 'end' : n.special === 'gate' && n.secretKind === 'trail' ? 'trail' : ['fragment', 'gate', 'boss', 'miniboss', 'treasure'].includes(n.special) ? n.special : ({ M: 'monster', F: 'forage', W: 'hunt', S: 'waystone', E: 'event' }[n.type]); }
+export function nodeIcon(n) { return n.kind === 'start' ? 'waystone' : n.special === 'descent' ? 'gate' : n.kind === 'end' ? 'end' : n.special === 'gate' && n.secretKind === 'trail' ? 'trail' : ['fragment', 'gate', 'boss', 'miniboss', 'treasure'].includes(n.special) ? n.special : n.typeIcon || ({ M: 'monster', F: 'forage', W: 'hunt', S: 'waystone', E: 'event', T: 'trap' }[n.type]) || 'event'; }

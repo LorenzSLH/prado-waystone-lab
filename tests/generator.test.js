@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { generate, topology, budgets, runeBudgets, questSolvable, reachable } from '../src/generation.js';
 import { RUNES, LEVELS, DEFAULT_CONFIG, TYPES, effects, floorProfile } from '../src/config.js';
 import { DECK_IDS, deckFor } from '../src/decks.js';
+import { DEFAULT_PROFILE, cloneProfile, exportProfile, importProfile, validateProfile } from '../src/profile.js';
 
 const combinations = [];
 for (let a = 0; a < 4; a++) for (let b = a + 1; b < 5; b++) for (let c = b + 1; c < 6; c++) combinations.push([RUNES[a].id, RUNES[b].id, RUNES[c].id]);
@@ -11,7 +12,7 @@ const signature = g => JSON.stringify({ nodes: g.nodes.map(({ id, depth, routeId
 test('11,200 graph matrix: both deck profiles, every rune set, level, 20 seeds, single/multi-floor and every floor', () => {
   let graphs = 0, threeWayFork = false, mergeSplit = false;
   for (const deck of DECK_IDS) for (const runes of combinations) for (let level = 1; level <= 5; level++) for (let seed = 0; seed < 20; seed++) for (const descent of [false, true]) for (let floor = 1; floor <= floorProfile({ level, descent }).floors; floor++) {
-    const config = { seed: `matrix-${seed}`, deck, runes, level, descent, floor }, g = generate(config);
+    const config = { seed: `matrix-${seed}`, deck, runes, level, descent, floor }, g = generate(config, DEFAULT_PROFILE, { trace: false });
     const label = JSON.stringify(config), p = floorProfile(config);
     assert.equal(Object.values(g.counts).reduce((a, b) => a + b), g.nodes.filter(n => n.kind === 'encounter').length, label);
     // Independent dynamic path-length check, not just node depth fields.
@@ -67,7 +68,7 @@ test('official Waystone deck content powers distinct dungeon and wilderness stor
   assert.equal(meadow.nodes.filter(n => n.special === 'fragment').length, 0);
   assert.equal(meadow.nodes.find(n => n.id === 'boss').name, 'Wickerbeast');
   for (const g of [filth, meadow]) {
-    const sourceNames = new Set([...g.deck.cards, ...g.deck.monsters, ...g.deck.rareEncounters].map(x => x.name));
+    const sourceNames = new Set([...g.deck.cards, ...g.deck.monsters, ...g.deck.rareEncounters, ...DEFAULT_PROFILE.cards.filter(card => card.deck === g.config.deck)].map(x => x.name));
     for (const n of g.nodes.filter(n => n.kind === 'encounter' && !['gate', 'fragment'].includes(n.special))) assert.ok(sourceNames.has(n.name), `${g.deck.name}: ${n.name}`);
   }
   assert.deepEqual(deckFor('filthworks').composition, { monster: 4, event: 1, rest: 1, wild: 1 });
@@ -95,12 +96,57 @@ test('largest remainder exact counts, zero weight, stable tie break', () => {
 });
 test('runes modify deck defaults while every core card group stays available', () => {
   const base = generate(DEFAULT_CONFIG), aggressive = generate({ ...DEFAULT_CONFIG, runes: ['blood', 'hunt', 'trail'] });
-  assert.ok(TYPES.every(type => base.weights[type] >= 1 && aggressive.weights[type] >= 1));
+  const active = DEFAULT_PROFILE.cardTypes.filter(type => type.baseProbability > 0).map(type => type.id);
+  assert.ok(active.every(type => base.weights[type] >= 1 && aggressive.weights[type] >= 0));
   assert.notDeepEqual(base.counts, aggressive.counts);
   assert.ok(aggressive.counts.M >= base.counts.M);
   assert.ok(aggressive.quests.every(q => q.compatible));
-  const exact = runeBudgets(80, deckFor('filthworks').defaultUnits, ['blood', 'hunt', 'trail']);
+  const probabilities = Object.fromEntries(DEFAULT_PROFILE.cardTypes.map(type => [type.id, type.baseProbability]));
+  const exact = runeBudgets(80, probabilities, ['blood', 'hunt', 'trail']);
   for (const type of TYPES) assert.equal(exact.counts[type], exact.base[type] + exact.deltas[type]);
+});
+test('dynamic profiles add card types, vary map size and preserve the generation trace', () => {
+  const profile = cloneProfile();
+  profile.cardTypes.find(type => type.id === 'M').baseProbability -= 5;
+  profile.cardTypes.find(type => type.id === 'T').baseProbability = 5;
+  profile.cardTypes.find(type => type.id === 'T').decisionWeight = 1;
+  profile.runes.find(rune => rune.id === 'hunt').cardDeltas.T = 2;
+  const baseline = generate({ ...DEFAULT_CONFIG, level: 5, descent: false });
+  const custom = generate({ ...DEFAULT_CONFIG, level: 5, descent: false }, profile);
+  assert.ok(custom.counts.T >= 2);
+  assert.equal(custom.nodes.filter(node => node.kind === 'encounter').length, baseline.nodes.filter(node => node.kind === 'encounter').length + 2);
+  assert.deepEqual(custom.generationTrace.at(-1).snapshot.nodes, custom.nodes);
+  assert.deepEqual(custom.generationTrace.at(-1).snapshot.edges, custom.edges);
+  assert.deepEqual(importProfile(exportProfile(profile)), validateProfile(profile));
+});
+test('negative rune totals remove optional nodes and placement limits every dynamic card', () => {
+  const profile = cloneProfile();
+  profile.cardTypes.find(type => type.id === 'M').baseProbability -= 5;
+  profile.cardTypes.find(type => type.id === 'T').baseProbability = 5;
+  profile.cardTypes.find(type => type.id === 'T').placement = { minLevel: 3, maxLevel: 5, minDepth: 4, maxDepth: 12 };
+  profile.cards.filter(card => card.typeId === 'T').forEach(card => { card.placement = { minLevel: 3, maxLevel: 5, minDepth: 4, maxDepth: 12 }; });
+  profile.runes.find(rune => rune.id === 'hunt').cardDeltas.T = -2;
+  const baseline = generate({ ...DEFAULT_CONFIG, level: 5, descent: false });
+  const reduced = generate({ ...DEFAULT_CONFIG, level: 5, descent: false }, profile);
+  assert.equal(reduced.nodes.filter(node => node.kind === 'encounter').length, baseline.nodes.filter(node => node.kind === 'encounter').length - 2);
+  assert.ok(reduced.nodes.filter(node => node.type === 'T').every(node => node.depth >= 4 && node.depth <= 12));
+  assert.equal(generate(DEFAULT_CONFIG, profile).nodes.some(node => node.type === 'T'), false);
+});
+test('the unique-card ceiling applies to the entire multi-floor adventure', () => {
+  let used = [];
+  for (let floor = 1; floor <= 3; floor++) {
+    const graph = generate({ ...DEFAULT_CONFIG, seed: 'unique-adventure', level: 5, floor }, DEFAULT_PROFILE, { usedUniqueCardIds: used });
+    used = graph.generatedUniqueCardIds;
+  }
+  assert.ok(new Set(used).size <= DEFAULT_PROFILE.huntingRules.uniquePerAdventure);
+});
+test('level and depth rules suppress locked features and invalid profiles explain conflicts', () => {
+  const profile = cloneProfile(), gate = profile.cards.find(card => card.id === 'filthworks-sluice-gate'); gate.placement.minLevel = 3;
+  const low = generate(DEFAULT_CONFIG, profile), high = generate({ ...DEFAULT_CONFIG, level: 3 }, profile);
+  assert.equal(low.plan.featureEnabled, false); assert.equal(low.nodes.some(node => node.special === 'gate'), false);
+  assert.equal(high.plan.featureEnabled, true);
+  profile.cardTypes[0].baseProbability++;
+  assert.throws(() => validateProfile(profile), /100/);
 });
 test('config validation and additive effects', () => {
   for (const bad of [{ seed: '' }, { seed: ' '.repeat(10) }, { seed: 'x'.repeat(81) }, { level: 0 }, { level: 1.5 }, { level: 6 }, { deck: 'unknown' }, { runes: ['hunt', 'hunt', 'ruin'] }, { runes: ['none', 'wild', 'ruin'] }, { descent: 'yes' }, { floor: 2 }]) assert.throws(() => generate({ ...DEFAULT_CONFIG, ...bad }));

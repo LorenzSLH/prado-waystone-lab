@@ -34,7 +34,7 @@ export function renderMap(graph, state, selected) {
     const v = visibility(graph, state, n.id), a = accessibility(graph, state, n.id), active = a === 'current';
     const unknown = v === 'unknown';
     const label = unknown ? '' : n.kind === 'start' ? 'DER WEGSTEIN' : n.kind === 'end' ? (n.special === 'descent' ? 'ABSTIEG' : 'AUSGANG') : n.special === 'boss' ? 'ENDBOSS' : n.special === 'miniboss' ? 'MINIBOSS' : v === 'rumor' ? 'GERÜCHT' : n.special === 'fragment' ? 'SCHLÜSSELTEIL' : n.special === 'choice' ? 'WERTVOLLE ALTERNATIVE' : n.special === 'gate' ? (n.secretKind === 'trail' ? 'GEHEIMPFAD' : 'GEHEIMTOR') : n.special === 'treasure' ? (n.unique ? 'EINZIGARTIGER FUND' : 'SCHATZKAMMER') : '';
-    return `<g id="node-${n.id}" data-node="${n.id}" class="map-node ${a} ${v} ${!unknown && ['boss', 'miniboss'].includes(n.special) ? 'boss-node' : ''} ${n.id === selected ? 'selected' : ''}" transform="translate(${n.x},${n.y})" tabindex="0" role="button" aria-label="${unknown ? 'Unbekannter Ort' : escape(n.name)} – ${v === 'rumor' ? 'Gerücht' : a === 'next' ? 'betretbar' : a === 'current' ? 'aktueller Ort' : a === 'missed' ? 'verpasst' : 'inspizieren'}">
+    return `<g id="node-${n.id}" data-node="${n.id}" class="map-node ${a} ${v} ${!unknown && ['boss', 'miniboss'].includes(n.special) ? 'boss-node' : ''} ${n.id === selected ? 'selected' : ''}" style="${!unknown && n.typeColor ? `color:${escape(n.typeColor)}` : ''}" transform="translate(${n.x},${n.y})" tabindex="0" role="button" aria-label="${unknown ? 'Unbekannter Ort' : escape(n.name)} – ${v === 'rumor' ? 'Gerücht' : a === 'next' ? 'betretbar' : a === 'current' ? 'aktueller Ort' : a === 'missed' ? 'verpasst' : 'inspizieren'}">
       <circle class="hit-area" r="35"/>
       ${active ? '<circle class="current-ring" r="30"/><path class="player" d="m-5-40 5 7 5-7Z"/>' : ''}
       ${v === 'rumor' ? '<circle class="rumor-ring" r="29"/>' : ''}
@@ -53,6 +53,14 @@ export function renderMap(graph, state, selected) {
     <g class="fog-bank" filter="url(#fog-soft)" aria-hidden="true">${fog}</g>
     ${nodes}
     <text class="map-bottom" x="${graph.width / 2}" y="${graph.height - 17}" text-anchor="middle">DEIN ABENTEUER BEGINNT HIER</text>
+  </svg>`;
+}
+export function renderGenerationStep(graph, step) {
+  const nodes = step.snapshot.nodes || [], edges = step.snapshot.edges || [], byId = new Map(nodes.map(node => [node.id, node]));
+  if (!nodes.length) return `<div class="trace-placeholder"><span>${icon('waystone')}</span><strong>Die Karte entsteht in Schritt 4.</strong><small>Dieser Schritt berechnet und prüft die Datenbasis.</small></div>`;
+  return `<svg class="trace-map" viewBox="0 0 ${graph.width} ${graph.height}" aria-label="Generatorstufe ${escape(step.phase)}">
+    ${edges.filter(edge => byId.has(edge.from) && byId.has(edge.to)).map(edge => { const a = byId.get(edge.from), b = byId.get(edge.to); return `<path d="M${a.x},${a.y} L${b.x},${b.y}"/>`; }).join('')}
+    ${nodes.map(node => `<g transform="translate(${node.x},${node.y})" style="color:${escape(node.typeColor || '#66765d')}"><circle r="${node.kind === 'encounter' ? 13 : 16}"/><g transform="translate(-8,-8) scale(.5)" fill="none" stroke="currentColor" stroke-width="2">${paths[nodeIcon(node)] || paths.unknown}</g></g>`).join('')}
   </svg>`;
 }
 export function landscape() {
