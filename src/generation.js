@@ -9,7 +9,7 @@ export function rng(seed) {
 }
 export function budgets(total, weights, typeIds = Object.keys(weights).sort()) {
   const sum = typeIds.reduce((value, id) => value + Number(weights[id] || 0), 0);
-  if (!Number.isInteger(total) || total < 0 || !sum || typeIds.some(id => !Number.isFinite(Number(weights[id])) || Number(weights[id]) < 0)) throw Error('Ungültiges Typbudget.');
+  if (!Number.isInteger(total) || total < 0 || !sum || typeIds.some(id => !Number.isFinite(Number(weights[id])) || Number(weights[id]) < 0)) throw Error('Invalid card-type budget.');
   const rows = typeIds.map(id => ({ id, exact: total * Number(weights[id] || 0) / sum, count: Math.floor(total * Number(weights[id] || 0) / sum) }));
   let remainder = total - rows.reduce((value, row) => value + row.count, 0);
   const order = [...rows].sort((a, b) => (b.exact - b.count) - (a.exact - a.count) || a.id.localeCompare(b.id));
@@ -24,12 +24,12 @@ export function runeBudgets(total, defaults, runes, profile = DEFAULT_PROFILE, m
     const required = requiredBase[id];
     while (base[id] < required) {
       const donor = [...ids].filter(other => other !== id && base[other] > requiredBase[other]).sort((a, b) => base[b] - base[a] || a.localeCompare(b))[0];
-      if (!donor) throw Error(`Pflichtkarten benötigen mehr ${id}-Plätze als die Karte erlaubt.`);
+      if (!donor) throw Error(`Required cards need more ${id} slots than the map allows.`);
       base[donor]--; base[id]++;
     }
   }
   const counts = Object.fromEntries(ids.map(id => [id, base[id] + deltas[id]]));
-  for (const id of ids) if (counts[id] < Number(minimums[id] || 0)) throw Error(`Runen reduzieren ${profile.cardTypes.find(type => type.id === id).name} unter das Pflichtminimum ${minimums[id] || 0}.`);
+  for (const id of ids) if (counts[id] < Number(minimums[id] || 0)) throw Error(`Runes reduce ${profile.cardTypes.find(type => type.id === id).name} below the required minimum of ${minimums[id] || 0}.`);
   return { base, deltas, counts, total: ids.reduce((sum, id) => sum + counts[id], 0) };
 }
 
@@ -41,7 +41,7 @@ const featureFor = (profile, config) => {
   if (!gate) return { enabled: false, gate: null, producers: [], lockCost: 0 };
   const lockCost = Number(gate.requires?.amount || 0), resourceId = gate.requires?.resourceId;
   const producers = resourceId ? cards.filter(card => card.produces?.resourceId === resourceId && positionAllows(card.placement, config.level, Math.max(2, card.placement?.minDepth || 2))).slice(0, lockCost) : [];
-  if (producers.reduce((sum, card) => sum + Number(card.produces?.amount || 0), 0) < lockCost) throw Error(`Tür ${gate.name} benötigt ${lockCost} × ${resourceId}, aber der Katalog bietet zu wenige vorherige Ressourcen.`);
+  if (producers.reduce((sum, card) => sum + Number(card.produces?.amount || 0), 0) < lockCost) throw Error(`Gate ${gate.name} requires ${lockCost} × ${resourceId}, but the catalog provides too few earlier resources.`);
   return { enabled: true, gate, producers, lockCost, resourceId };
 };
 
@@ -83,7 +83,7 @@ export function topology(input, options = {}) {
   let remaining = adjustment;
   if (remaining > 0) for (let pass = 0; remaining > 0 && pass < 3; pass++) for (const item of candidates) if (remaining > 0 && rowCounts.get(item.key) < Number(options.maxBranches || 3)) { rowCounts.set(item.key, rowCounts.get(item.key) + 1); remaining--; }
   if (remaining < 0) for (const item of [...candidates].reverse()) while (remaining < 0 && rowCounts.get(item.key) > item.minimum) { rowCounts.set(item.key, rowCounts.get(item.key) - 1); remaining++; }
-  if (remaining) throw Error(`Runen ändern die Kartenzahl um ${adjustment}; auf dieser Ebene können davon nur ${adjustment - remaining} Knoten sicher platziert werden.`);
+  if (remaining) throw Error(`Runes change the card count by ${adjustment}; only ${adjustment - remaining} nodes can be placed safely on this floor.`);
   const rows = new Map([[1, [entry]]]);
   for (let depth = 2; depth < p.depth; depth++) {
     if (junctionDepths.has(depth)) {
@@ -148,7 +148,7 @@ function requiredMinimums(profile, config, feature) {
 function chooseCatalogCard(profile, config, type, node, random, uniqueIds, maxUnique) {
   const typeRule = profile.cardTypes.find(item => item.id === type);
   const candidates = profile.cards.filter(card => card.deck === config.deck && card.typeId === type && !['gate', 'resource'].includes(card.behavior) && cardEligible(card, config.level, node.depth) && !(card.rarity === 'U' && (uniqueIds.has(card.id) || uniqueIds.size >= maxUnique)));
-  if (!candidates.length) throw Error(`${typeRule.name} hat auf Tiefe ${node.depth} keine zulässige Karte.`);
+  if (!candidates.length) throw Error(`${typeRule.name} has no eligible card at depth ${node.depth}.`);
   const rarityPool = ['C', 'R', 'U'].filter(rarity => candidates.some(card => card.rarity === rarity));
   const pickedRarity = weightedPick(rarityPool, rarity => typeRule.rarityWeights[rarity], random) || candidates[0].rarity;
   const picked = weightedPick(candidates.filter(card => card.rarity === pickedRarity), card => card.selectionWeight, random);
@@ -165,20 +165,20 @@ export function generate(input, suppliedProfile = DEFAULT_PROFILE, options = {})
   const adjustment = cardBudget.total - baseTotal;
   const graph = adjustment ? topology(config, { profile, feature, adjustment, maxBranches: profile.placementRules.maxBranchesPerLane }) : baseGraph;
   const slots = graph.nodes.filter(node => node.kind === 'encounter');
-  if (slots.length !== cardBudget.total) throw Error(`Kartenziel ${cardBudget.total} stimmt nicht mit ${slots.length} erzeugten Plätzen überein.`);
+  if (slots.length !== cardBudget.total) throw Error(`The target of ${cardBudget.total} cards does not match the ${slots.length} generated slots.`);
   const counts = cardBudget.counts, left = { ...counts }, byId = id => graph.nodes.find(node => node.id === id), random = rng(`${config.seed}|${config.deck}|floor:${config.floor}|content|${config.runes.join(',')}|${hash}|${GENERATOR_VERSION}`);
   const traceEnabled = options.trace !== false;
   const trace = traceEnabled ? [
-    { phase: 'validate', details: [`Profil ${profile.name} ist gültig.`, `Seed ${config.seed} · Level ${config.level} · Ebene ${config.floor}`], snapshot: { nodes: [], edges: [] } },
+    { phase: 'validate', details: [`Profile ${profile.name} is valid.`, `Seed ${config.seed} · Level ${config.level} · floor ${config.floor}`], snapshot: { nodes: [], edges: [] } },
     { phase: 'base-budget', details: ids.map(id => `${typeMap[id].name}: ${cardBudget.base[id]}`), snapshot: { nodes: [], edges: [] } },
     { phase: 'runes', details: ids.map(id => `${typeMap[id].name}: ${cardBudget.deltas[id] >= 0 ? '+' : ''}${cardBudget.deltas[id]} → ${counts[id]}`), snapshot: { nodes: [], edges: [] } },
-    snapshot({ ...graph, nodes: graph.nodes.filter(node => ['start', 'end'].includes(node.kind) || node.id === 'boss'), edges: [] }, 'grid', [`${p.routes} Korridore · ${p.depth} Begegnungstiefen`, `${slots.length} Kartenplätze`]),
-    snapshot(graph, 'paths', [`${graph.edges.length} kreuzungsfreie Kanten`, `${graph.plan.junctionDepths.length} Merge-/Split-Punkte`]),
+    snapshot({ ...graph, nodes: graph.nodes.filter(node => ['start', 'end'].includes(node.kind) || node.id === 'boss'), edges: [] }, 'grid', [`${p.routes} corridors · ${p.depth} encounter depths`, `${slots.length} card slots`]),
+    snapshot(graph, 'paths', [`${graph.edges.length} non-crossing edges`, `${graph.plan.junctionDepths.length} merge/split points`]),
   ] : [];
   const reserve = (id, type, special, content = {}) => {
     const node = byId(id);
     if (!node || node.type) return false;
-    if (!ids.includes(type) || left[type] < 1) throw Error(`Pflichtkarte ${content.name || special} benötigt einen freien ${type}-Platz.`);
+    if (!ids.includes(type) || left[type] < 1) throw Error(`Required card ${content.name || special} needs an available ${type} slot.`);
     const { id: cardId, ...details } = content;
     Object.assign(node, details, { type, special, behavior: content.behavior || typeMap[type].behavior, typeIcon: typeMap[type].icon, typeColor: typeMap[type].color, decisionWeight: content.decisionWeight || typeMap[type].decisionWeight }); if (cardId) node.cardId = cardId; left[type]--; return true;
   };
@@ -201,15 +201,15 @@ export function generate(input, suppliedProfile = DEFAULT_PROFILE, options = {})
     reserve('secret-cache', 'E', 'treasure', { name: deck.secret.vaultName, description: deck.secret.vaultDescription, rarity: 'U', unique: true, decisionWeight: 4 });
     Object.assign(byId(graph.plan.discoveryId), { discovers: 'entrance', storyBeat: deck.secret.discoveryName }); byId(graph.plan.gateId).discovers = 'passage';
   }
-  quests.push({ id: 'gate', title: deck.secret.questTitle, target: graph.plan.gateId, prerequisites: graph.plan.resources.map(item => item.id), compatible: feature.enabled, reason: feature.enabled ? '' : 'Die Level-/Tiefenregel schließt diese Tür auf der aktuellen Karte aus.', description: feature.enabled ? `Collect the required resources and open ${feature.gate.name}.` : 'This feature becomes available at a later configured level or depth.' });
-  if (traceEnabled) trace.push(snapshot(graph, 'required', feature.enabled ? [`${feature.producers.length} Ressourcen vor ${feature.gate.name}`, 'Freier Bypass und geheimer Seitenarm reserviert'] : ['Keine zulässige Tür auf diesem Level', 'Jagd- und Sammelort reserviert']));
+  quests.push({ id: 'gate', title: deck.secret.questTitle, target: graph.plan.gateId, prerequisites: graph.plan.resources.map(item => item.id), compatible: feature.enabled, reason: feature.enabled ? '' : 'The level/depth rule excludes this gate from the current map.', description: feature.enabled ? `Collect the required resources and open ${feature.gate.name}.` : 'This feature becomes available at a later configured level or depth.' });
+  if (traceEnabled) trace.push(snapshot(graph, 'required', feature.enabled ? [`${feature.producers.length} resources before ${feature.gate.name}`, 'Open bypass and secret side arm reserved'] : ['No eligible gate at this level', 'Hunting and foraging locations reserved']));
 
   const empty = slots.filter(node => !node.type), multiset = ids.flatMap(id => Array.from({ length: left[id] }, () => id));
   multiset.sort((a, b) => { const pa = typeMap[a].placement, pb = typeMap[b].placement; return (pa.maxDepth - pa.minDepth) - (pb.maxDepth - pb.minDepth) || typeMap[b].decisionWeight - typeMap[a].decisionWeight || a.localeCompare(b); });
   const routeCounts = {}, routeWeight = Object.fromEntries(graph.routes.map(route => [route.id, 0]));
   for (const type of multiset) {
     const rule = typeMap[type], candidates = empty.filter(node => !node.type && positionAllows(rule.placement, config.level, node.depth));
-    if (!candidates.length) throw Error(`${rule.name} kann mit den eingestellten Level-/Tiefenregeln nicht vollständig platziert werden.`);
+    if (!candidates.length) throw Error(`${rule.name} cannot be fully placed within its configured level/depth rules.`);
     const selected = candidates.map(node => {
       const weight = node.plannedChoice ? 3 : rule.decisionWeight;
       const siblings = empty.filter(other => other.type && other.routeId === node.routeId && other.depth === node.depth);
@@ -229,15 +229,15 @@ export function generate(input, suppliedProfile = DEFAULT_PROFILE, options = {})
     const encounter = rng(`${config.seed}|${config.deck}|floor:${config.floor}|encounter|${config.runes.join(',')}|${node.id}|${hash}|${GENERATOR_VERSION}`);
     node.outcome = { roll: encounter(), loot: 3 + Math.floor(encounter() * 6), herbs: 1 + Math.floor(encounter() * 3) };
   }
-  byId('start').name = 'Der Wegstein'; byId('start').description = `${deck.name} begins here. ${deck.description}`;
-  byId('end').name = config.floor < p.floors ? 'Das Tor in die Tiefe' : 'Der Weg nach Hause'; byId('end').special = config.floor < p.floors ? 'descent' : 'exit';
-  if (traceEnabled) trace.push(snapshot(graph, 'content', [`${slots.length} Karten aus gewichteten Raritätspools gewählt`, `${uniqueIds.size - (options.usedUniqueCardIds || []).length} neue Unique-Karten reserviert`]));
+  byId('start').name = 'The Waystone'; byId('start').description = `${deck.name} begins here. ${deck.description}`;
+  byId('end').name = config.floor < p.floors ? 'Das Tor in die Depth' : 'The Road Home'; byId('end').special = config.floor < p.floors ? 'descent' : 'exit';
+  if (traceEnabled) trace.push(snapshot(graph, 'content', [`${slots.length} cards drawn from weighted rarity pools`, `${uniqueIds.size - (options.usedUniqueCardIds || []).length} new unique cards reserved`]));
   const rumorRandom = rng(`${config.seed}|${config.deck}|floor:${config.floor}|rumors|${hash}|${GENERATOR_VERSION}`);
   const rumors = quests.filter(quest => quest.compatible && byId(quest.target) && !byId(quest.target).secret).map(quest => ({ id: quest.target, rank: rumorRandom() })).sort((a, b) => a.rank - b.rank).map(item => item.id);
   const regular = graph.nodes.filter(node => node.kind === 'encounter' && !node.secret), pathRange = regularPathWeightRange(graph), totalWeight = regular.reduce((sum, node) => sum + node.decisionWeight, 0);
   const result = { generatorVersion: GENERATOR_VERSION, profileHash: hash, huntingRules: structuredClone(profile.huntingRules), huntRarityWeights: structuredClone(typeMap.M.rarityWeights), config, deck: structuredClone(deck), ...graph, counts, weights: counts, cardBudget, effects: effects(config.runes, profile), quests, rumors, generatedUniqueCardIds: [...uniqueIds], weightProfile: { total: totalWeight, average: totalWeight / regular.length, ...pathRange, scale: { basic: 1, uncommon: 2, rare: 3, unique: 4, miniboss: 5, boss: 6 } } };
   validateGraph(result, profile);
-  if (traceEnabled) trace.push({ phase: 'validate-final', details: [`Pfadwerte ${pathRange.pathMin}–${pathRange.pathMax}`, 'Erreichbarkeit, Abhängigkeiten, Budgets und Kanten geprüft'], snapshot: { nodes: structuredClone(result.nodes), edges: structuredClone(result.edges) } });
+  if (traceEnabled) trace.push({ phase: 'validate-final', details: [`Path values ${pathRange.pathMin}–${pathRange.pathMax}`, 'Reachability, dependencies, budgets, and edges verified'], snapshot: { nodes: structuredClone(result.nodes), edges: structuredClone(result.edges) } });
   result.generationTrace = trace; return result;
 }
 
@@ -261,17 +261,17 @@ export function questSolvable(graph, quest) {
 }
 export function validateGraph(graph, profile = DEFAULT_PROFILE) {
   const fail = message => { throw Error(`Generator: ${message} [${graph.config.seed}, L${graph.config.level}]`); }, byId = new Map(graph.nodes.map(node => [node.id, node])), p = floorProfile(graph.config), ids = profileTypes(profile);
-  if (byId.size !== graph.nodes.length || graph.nodes.length > p.depth * p.routes * Number(profile.placementRules.maxBranchesPerLane) + 8) fail('Knotengrenze/IDs');
-  if (reachable(graph, 'start').size !== graph.nodes.length) fail('unerreichbare Knoten');
+  if (byId.size !== graph.nodes.length || graph.nodes.length > p.depth * p.routes * Number(profile.placementRules.maxBranchesPerLane) + 8) fail('Node limit or duplicate IDs');
+  if (reachable(graph, 'start').size !== graph.nodes.length) fail('unerreichbare nodes');
   const actual = Object.fromEntries(ids.map(id => [id, 0]));
-  for (const node of graph.nodes) { const out = graph.edges.filter(edge => edge.from === node.id); if (node.kind === 'end' ? out.length : out.length < 1 || out.length > 6) fail('Nachfolger'); if (node.kind === 'encounter') { if (!ids.includes(node.type)) fail('Typ'); actual[node.type]++; if (!positionAllows(profile.cardTypes.find(type => type.id === node.type).placement, graph.config.level, node.depth) && !node.special) fail(`Platzierungsregel ${node.type}`); } if (out.length && out.every(edge => byId.get(edge.to).special === 'gate')) fail('Tor ist einziger Ausweg'); }
+  for (const node of graph.nodes) { const out = graph.edges.filter(edge => edge.from === node.id); if (node.kind === 'end' ? out.length : out.length < 1 || out.length > 6) fail('Invalid successor count'); if (node.kind === 'encounter') { if (!ids.includes(node.type)) fail('Unknown type'); actual[node.type]++; if (!positionAllows(profile.cardTypes.find(type => type.id === node.type).placement, graph.config.level, node.depth) && !node.special) fail(`Placement rule ${node.type}`); } if (out.length && out.every(edge => byId.get(edge.to).special === 'gate')) fail('Gate is the only exit'); }
   for (const id of ids) if (actual[id] !== graph.counts[id]) fail(`Budget ${id}`);
-  for (const edge of graph.edges) { const a = byId.get(edge.from), b = byId.get(edge.to); if (!a || !b || b.depth !== a.depth + 1) fail('Rückwärtskante/Tiefe'); if (a.routeId && b.routeId && a.routeId !== b.routeId) fail('Querverbindung'); }
-  for (let i = 0; i < graph.edges.length; i++) for (let j = i + 1; j < graph.edges.length; j++) { const a = graph.edges[i], b = graph.edges[j]; if ([a.from, a.to].some(id => id === b.from || id === b.to)) continue; if (segmentsCross(byId.get(a.from), byId.get(a.to), byId.get(b.from), byId.get(b.to))) fail('Kantenkreuzung'); }
-  for (const quest of graph.quests) if (!questSolvable(graph, quest)) fail(`Quest ${quest.id} nicht lösbar`);
-  for (const item of graph.plan.resources) { const choices = [byId.get(item.id), ...item.choiceIds.map(id => byId.get(id))]; if (new Set(choices.map(node => node.routeId)).size !== choices.length || new Set(choices.map(node => node.decisionWeight)).size !== 1) fail('unausgewogener Ressourcentausch'); }
-  if (graph.weightProfile.pathSpread > Number(profile.placementRules.maxPathSpread)) fail(`Pfadwerte unterscheiden sich um ${graph.weightProfile.pathSpread} statt maximal ${profile.placementRules.maxPathSpread}`);
-  if (graph.nodes.filter(node => node.kind === 'end').length !== 1 || graph.edges.some(edge => edge.to === 'end' && edge.from !== 'boss')) fail('Abschluss ohne Boss');
-  for (const node of graph.nodes.filter(node => node.id !== 'end')) if (!reachable(graph, node.id).has('boss')) fail('Pfad führt nicht zum Boss');
+  for (const edge of graph.edges) { const a = byId.get(edge.from), b = byId.get(edge.to); if (!a || !b || b.depth !== a.depth + 1) fail('Backward edge/depth'); if (a.routeId && b.routeId && a.routeId !== b.routeId) fail('Cross-lane connection'); }
+  for (let i = 0; i < graph.edges.length; i++) for (let j = i + 1; j < graph.edges.length; j++) { const a = graph.edges[i], b = graph.edges[j]; if ([a.from, a.to].some(id => id === b.from || id === b.to)) continue; if (segmentsCross(byId.get(a.from), byId.get(a.to), byId.get(b.from), byId.get(b.to))) fail('Edge crossing'); }
+  for (const quest of graph.quests) if (!questSolvable(graph, quest)) fail(`Quest ${quest.id} is not solvable`);
+  for (const item of graph.plan.resources) { const choices = [byId.get(item.id), ...item.choiceIds.map(id => byId.get(id))]; if (new Set(choices.map(node => node.routeId)).size !== choices.length || new Set(choices.map(node => node.decisionWeight)).size !== 1) fail('unausgewogener Resourcestausch'); }
+  if (graph.weightProfile.pathSpread > Number(profile.placementRules.maxPathSpread)) fail(`Path values differ by ${graph.weightProfile.pathSpread}, exceeding the maximum of ${profile.placementRules.maxPathSpread}`);
+  if (graph.nodes.filter(node => node.kind === 'end').length !== 1 || graph.edges.some(edge => edge.to === 'end' && edge.from !== 'boss')) fail('Ending without boss');
+  for (const node of graph.nodes.filter(node => node.id !== 'end')) if (!reachable(graph, node.id).has('boss')) fail('Path does not reach the boss');
   return true;
 }

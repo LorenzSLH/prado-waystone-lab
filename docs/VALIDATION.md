@@ -1,6 +1,6 @@
 # Prüfprotokoll
 
-Stand: 22. September 2026 · Generator 5.0.0
+Stand: 22. September 2026 · Generator 5.1.0
 
 ## Automatisiert
 
@@ -23,6 +23,7 @@ Geprüfte Invarianten:
 Chrome wurde headless bei 1440 × 1000 und 390 × 844 geprüft.
 
 - [x] Keine Browser-Konsolenfehler.
+- [x] Die vollständige Demo-Oberfläche, Kartentexte und Fehlermeldungen sind auf Englisch.
 - [x] Kein horizontaler Seitenüberlauf bei 390 px.
 - [x] Spielkarte, Pfadansicht und mobile Bedienelemente skalieren vollständig in den Viewport.
 - [x] Generator-Eigenschaften öffnen mit Kartenarten, Katalog, Runenmatrix, Regeln und Profil-JSON.

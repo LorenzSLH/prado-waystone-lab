@@ -42,7 +42,7 @@ test('all regular paths visible without learning contents; toggling does not mut
     else assert.ok(markup.includes(`data-node="${n.id}"`));
     if (visibility(s.graph, s.state, n.id) === 'unknown') {
       const group = markup.slice(markup.indexOf(`id="node-${n.id}"`)).split('</g>')[0];
-      assert.ok(group.includes('aria-label="Unbekannter Ort'));
+      assert.ok(group.includes('aria-label="Unknown location'));
       assert.ok(!group.includes(n.name));
     }
   }

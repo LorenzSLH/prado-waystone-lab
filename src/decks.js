@@ -126,7 +126,7 @@ export const DECKS = {
 export const DECK_IDS = Object.keys(DECKS);
 export function deckFor(id) {
   const deck = DECKS[id];
-  if (!deck) throw Error('Unbekanntes Waystone-Deck.');
+  if (!deck) throw Error('Unknown Waystone deck.');
   return deck;
 }
 

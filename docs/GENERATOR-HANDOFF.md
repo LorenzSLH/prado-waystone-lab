@@ -12,11 +12,11 @@ This prototype combines three compatible loops:
 
 ## Runtime contracts
 
-`GeneratorProfile` is stored separately from a run. Its JSON schema version is currently `1`; generated sessions use generator schema `5`. A session embeds the exact profile snapshot and its deterministic FNV-1a hash.
+`GeneratorProfile` is stored separately from a run. Its JSON schema version is currently `2`; generated sessions use generator schema `5` and generator version `5.1.0`. A session embeds the exact profile snapshot and its deterministic FNV-1a hash.
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "prado-waystone-standard",
   "name": "Prado Waystone Standard",
   "cardTypes": [{
@@ -112,7 +112,7 @@ Bait defaults to a 3× rare/unique multiplier, is consumed exactly once on entry
 - `src/map.js`: playable map and trace snapshot rendering.
 - `src/app.js`: property editor, stepper, play controls, summaries, and local persistence.
 
-Profiles use `prado.waystone.generator-profile.v1`; sessions use `prado.waystone.v5`. On first v5 load, deck, runes, level, seed, and floor mode are read from the old v4 key. The v4 value remains untouched while the active v5 map is rebuilt with the default profile. Import validates the embedded profile and hash, regenerates every floor, then replays actions through the state machine.
+English profiles use `prado.waystone.generator-profile.v2`; sessions use `prado.waystone.v5.1`. Earlier local keys remain untouched. On first v5 load, deck, runes, level, seed, and floor mode can be read from the old v4 key while the active map is rebuilt with the current default profile. Import validates the embedded profile and hash, regenerates every floor, then replays actions through the state machine.
 
 Core acceptance invariants are: one end node; every node reachable from start and able to reach the mandatory boss; adjacent-depth edges only; no geometric crossings; exact type budgets; eligible type/card placement; no repeated unique; solvable resource dependencies; an open bypass around every locked side arm; and a final trace snapshot identical to the playable nodes and edges.
 

@@ -49,7 +49,7 @@ test('11,200 graph matrix: both deck profiles, every rune set, level, 20 seeds, 
 });
 
 test('determinism, normalized rune order, independent topology stream', () => {
-  const a = generate(DEFAULT_CONFIG), b = generate({ ...DEFAULT_CONFIG, seed: '  MOOSPFAD-42 ', runes: [...DEFAULT_CONFIG.runes].reverse() });
+  const a = generate(DEFAULT_CONFIG), b = generate({ ...DEFAULT_CONFIG, seed: '  MOSS-PATH-42 ', runes: [...DEFAULT_CONFIG.runes].reverse() });
   assert.deepEqual(a, b);
   for (const runes of combinations) assert.equal(signature(generate({ ...DEFAULT_CONFIG, runes })), signature(a));
   assert.notEqual(signature(generate({ ...DEFAULT_CONFIG, seed: 'other' })), signature(a));

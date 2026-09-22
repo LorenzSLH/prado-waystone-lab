@@ -12,7 +12,7 @@ export function initialState(graph, profile = DEFAULT_PROFILE, view = DEFAULT_VI
   discover(graph, state); updateQuests(graph, state); return state;
 }
 function validateView(view) {
-  if (!view || !['off', 'local', 'rumors'].includes(view.fog) || !Number.isInteger(view.preview) || view.preview < 0 || view.preview > 5 || !Number.isInteger(view.rumorCount) || view.rumorCount < 0 || view.rumorCount > 3 || typeof view.paths !== 'boolean' || typeof view.debug !== 'boolean' || typeof view.infinite !== 'boolean' || Object.keys(view).length !== 6) throw Error('Ungültige Laboransicht.');
+  if (!view || !['off', 'local', 'rumors'].includes(view.fog) || !Number.isInteger(view.preview) || view.preview < 0 || view.preview > 5 || !Number.isInteger(view.rumorCount) || view.rumorCount < 0 || view.rumorCount > 3 || typeof view.paths !== 'boolean' || typeof view.debug !== 'boolean' || typeof view.infinite !== 'boolean' || Object.keys(view).length !== 6) throw Error('Invalid lab view.');
 }
 export function secretAvailable(state, node) { return !node.secret || state.discoveredSecrets.includes(node.secret); }
 export function discover(graph, state) {
@@ -80,19 +80,19 @@ export function rollHunt(graph, profile, state, node, useBait) {
   return { nodeId: node.id, cardId: selected.id, name: selected.name, rarity: selected.rarity, bait: useBait, loreBefore: lore, rareChance: chance };
 }
 export function transition(graph, profile, original, action) {
-  if (!action || typeof action.type !== 'string') throw Error('Ungültige Aktion.');
+  if (!action || typeof action.type !== 'string') throw Error('Invalid action.');
   const state = structuredClone(original), current = getNode(graph, state.currentNodeId);
   switch (action.type) {
     case 'reset': return initialState(graph, profile, state.view);
     case 'view': validateView(action.view); state.view = { ...action.view }; discover(graph, state); break;
-    case 'energy': if (state.energy > 99980) throw Error('Testenergie-Limit erreicht.'); state.energy += 20; break;
+    case 'energy': if (state.energy > 99980) throw Error('Test-energy limit reached.'); state.energy += 20; break;
     case 'enter': {
       const node = getNode(graph, action.id), useBait = Boolean(action.bait);
-      if (state.status !== 'exploring') throw Error('Schließe zuerst die aktuelle Begegnung ab.');
-      if (!node || accessibility(graph, state, node.id) !== 'next') throw Error('Dieser Ort ist nicht direkt betretbar.');
-      if (useBait && (node.behavior !== 'hunt' || state.inventory.bait < 1)) throw Error('Kein passender Köder verfügbar.');
+      if (state.status !== 'exploring') throw Error('Complete the current encounter first.');
+      if (!node || accessibility(graph, state, node.id) !== 'next') throw Error('This location cannot be entered directly.');
+      if (useBait && (node.behavior !== 'hunt' || state.inventory.bait < 1)) throw Error('No suitable bait is available.');
       const cost = node.kind === 'encounter' ? 1 : 0;
-      if (state.energy < cost && !state.view.infinite) throw Error('Zu wenig Energie. Fülle im Labor Testenergie nach.');
+      if (state.energy < cost && !state.view.infinite) throw Error('Not enough energy. Add test energy in the lab.');
       if (!state.view.infinite) state.energy -= cost;
       if (node.requires?.consume) { state.inventory.resources[node.requires.resourceId] -= node.requires.amount; state.inventory.fragments = Math.max(0, state.inventory.fragments - node.requires.amount); }
       if (useBait) state.inventory.bait--;
@@ -102,7 +102,7 @@ export function transition(graph, profile, original, action) {
       discover(graph, state); break;
     }
     case 'resolve': {
-      if (state.status !== 'encounter' || state.resolvedEncounters[current.id]) throw Error('Diese Begegnung ist bereits abgeschlossen.');
+      if (state.status !== 'encounter' || state.resolvedEncounters[current.id]) throw Error('This encounter is already complete.');
       const hunt = state.pendingHunt?.nodeId === current.id ? state.pendingHunt : null, mods = graph.effects, outcome = current.outcome;
       const fragmentBonus = current.produces ? Math.round(10 * mods.fragment.multiplier) : 0;
       const specialBonus = current.special === 'treasure' ? 25 : current.special === 'boss' ? 40 : current.special === 'miniboss' ? 15 : 0;
@@ -116,7 +116,7 @@ export function transition(graph, profile, original, action) {
       if (current.discovers && !state.discoveredSecrets.includes(current.discovers)) state.discoveredSecrets.push(current.discovers);
       state.pendingHunt = null; state.status = 'exploring'; break;
     }
-    default: throw Error('Unbekannte Aktion.');
+    default: throw Error('Unknown action.');
   }
   discover(graph, state); updateQuests(graph, state); return state;
 }
@@ -125,10 +125,10 @@ export function newSession(config, suppliedProfile = DEFAULT_PROFILE) {
   return { schemaVersion: SCHEMA_VERSION, generatorVersion: GENERATOR_VERSION, profile, profileHash: profileHash(profile), config: graph.config, graph, state: initialState(graph, profile), completedFloors: [], generatedUniqueCardIds: [...graph.generatedUniqueCardIds], actions: [] };
 }
 export function dispatch(session, action) {
-  if (session.actions.length >= 10000) throw Error('Aktionslimit erreicht. Bitte den Run zurücksetzen.');
+  if (session.actions.length >= 10000) throw Error('Action limit reached. Reset the run.');
   let next;
   if (action.type === 'descend') {
-    if (session.state.status !== 'floor-cleared' || session.graph.config.floor >= floorProfile(session.graph.config).floors) throw Error('Das Abstiegstor ist noch nicht offen.');
+    if (session.state.status !== 'floor-cleared' || session.graph.config.floor >= floorProfile(session.graph.config).floors) throw Error('The descent gate is not open yet.');
     const unavailable = [...new Set([...session.generatedUniqueCardIds, ...(session.state.uniqueCardIds || [])])];
     const graph = generate({ ...session.graph.config, floor: session.graph.config.floor + 1 }, session.profile, { usedUniqueCardIds: unavailable });
     const state = initialState(graph, session.profile, session.state.view); state.inventory = structuredClone(session.state.inventory); state.energy = session.state.energy; state.lore = structuredClone(session.state.lore); state.huntLog = structuredClone(session.state.huntLog); state.uniqueCardIds = [...new Set([...unavailable, ...graph.generatedUniqueCardIds])];
@@ -142,13 +142,13 @@ export function resetSession(session) { return dispatch(session, { type: 'reset'
 const normalized = value => value && typeof value === 'object' ? Array.isArray(value) ? value.map(item => item === undefined ? null : normalized(item)) : Object.fromEntries(Object.keys(value).filter(key => value[key] !== undefined).sort().map(key => [key, normalized(value[key])])) : value;
 const canonical = value => JSON.stringify(normalized(value));
 export function importSession(text) {
-  if (typeof text !== 'string' || text.length > 5_000_000) throw Error('Datei ist zu groß (maximal 5 MB).');
-  let data; try { data = JSON.parse(text); } catch { throw Error('Die Datei enthält kein gültiges JSON.'); }
-  if (!data || data.schemaVersion !== SCHEMA_VERSION || data.generatorVersion !== GENERATOR_VERSION) throw Error('Diese Speicherstand-Version wird nicht unterstützt.');
-  if (!data.graph || !data.profile || profileHash(validateProfile(data.profile)) !== data.profileHash || !Array.isArray(data.actions) || data.actions.length > 10000) throw Error('Unvollständiger oder veränderter Speicherstand.');
+  if (typeof text !== 'string' || text.length > 5_000_000) throw Error('File is too large (maximum 5 MB).');
+  let data; try { data = JSON.parse(text); } catch { throw Error('The file does not contain valid JSON.'); }
+  if (!data || data.schemaVersion !== SCHEMA_VERSION || data.generatorVersion !== GENERATOR_VERSION) throw Error('This save-file version is not supported.');
+  if (!data.graph || !data.profile || profileHash(validateProfile(data.profile)) !== data.profileHash || !Array.isArray(data.actions) || data.actions.length > 10000) throw Error('The save file is incomplete or modified.');
   let replay = newSession(data.config, data.profile);
   for (const action of data.actions) replay = dispatch(replay, action);
-  if (canonical(replay.graph) !== canonical(data.graph) || canonical(replay.state) !== canonical(data.state) || canonical(replay.completedFloors) !== canonical(data.completedFloors) || canonical(replay.config) !== canonical(data.config)) throw Error('Der Spielstand stimmt nicht mit Seed, Profil und Aktionsverlauf überein.');
+  if (canonical(replay.graph) !== canonical(data.graph) || canonical(replay.state) !== canonical(data.state) || canonical(replay.completedFloors) !== canonical(data.completedFloors) || canonical(replay.config) !== canonical(data.config)) throw Error('The save file does not match its seed, profile, and action history.');
   return replay;
 }
 export function migrateV4Config(value) {

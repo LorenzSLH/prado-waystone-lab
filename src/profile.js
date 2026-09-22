@@ -1,6 +1,6 @@
 import { DECKS } from './decks.js';
 
-export const PROFILE_SCHEMA_VERSION = 1;
+export const PROFILE_SCHEMA_VERSION = 2;
 export const EFFECT_KEYS = ['hp', 'attack', 'leech', 'heal', 'loot', 'itemRarity', 'forage', 'fragment', 'rare', 'bait'];
 export const BEHAVIORS = ['standard', 'hunt', 'trap', 'resource', 'gate'];
 export const RARITIES = ['C', 'R', 'U'];
@@ -40,20 +40,20 @@ export const DEFAULT_PROFILE = {
   name: 'Prado Waystone Standard',
   cardTypes: [
     type('M', 'Monster', '#b98676', 'monster', 50, 1, 'standard', { C: 70, R: 25, U: 5 }),
-    type('S', 'Schrein', '#8d78a0', 'waystone', 12.5, 1, 'standard', { C: 70, R: 30, U: 0 }),
-    type('F', 'Sammelkarte', '#869975', 'forage', 12.5, 1, 'standard', { C: 80, R: 20, U: 0 }),
-    type('E', 'Eventkarte', '#8f94a0', 'event', 12.5, 1, 'standard', { C: 70, R: 25, U: 5 }),
-    type('W', 'Jagdgebiet', '#b49a5e', 'hunt', 12.5, 1, 'hunt', { C: 100, R: 0, U: 0 }),
-    type('T', 'Falle', '#9b6d54', 'trap', 0, 2, 'trap', { C: 100, R: 0, U: 0 }),
+    type('S', 'Shrine', '#8d78a0', 'waystone', 12.5, 1, 'standard', { C: 70, R: 30, U: 0 }),
+    type('F', 'Foraging card', '#869975', 'forage', 12.5, 1, 'standard', { C: 80, R: 20, U: 0 }),
+    type('E', 'Event card', '#8f94a0', 'event', 12.5, 1, 'standard', { C: 70, R: 25, U: 5 }),
+    type('W', 'Hunting ground', '#b49a5e', 'hunt', 12.5, 1, 'hunt', { C: 100, R: 0, U: 0 }),
+    type('T', 'Trap', '#9b6d54', 'trap', 0, 2, 'trap', { C: 100, R: 0, U: 0 }),
   ],
   cards: catalog,
   runes: [
-    rune('hunt', 'Jagd', 'hunt', { M: 1, S: -1, F: -1, E: -1, W: 2, T: 0 }, { hp: 15, loot: 10 }),
-    rune('wild', 'Wildnis', 'forage', { M: -1, S: -1, F: 2, E: -1, W: 1, T: 0 }, { attack: 10, forage: 20 }),
-    rune('ruin', 'Ruine', 'gate', { M: -1, S: 2, F: -1, E: 1, W: -1, T: 0 }, { heal: -15, fragment: 15, itemRarity: 10 }),
-    rune('blood', 'Blutmond', 'monster', { M: 2, S: -1, F: -1, E: -1, W: 1, T: 0 }, { attack: 20, leech: 15, rare: 15 }),
-    rune('haven', 'Zuflucht', 'camp', { M: -1, S: 1, F: -1, E: 2, W: -1, T: 0 }, { hp: 10, heal: 20 }),
-    rune('trail', 'Fährte', 'trail', { M: -1, S: -1, F: 1, E: -1, W: 2, T: 0 }, { hp: 10, bait: 20 }),
+    rune('hunt', 'Hunt', 'hunt', { M: 1, S: -1, F: -1, E: -1, W: 2, T: 0 }, { hp: 15, loot: 10 }),
+    rune('wild', 'Wilderness', 'forage', { M: -1, S: -1, F: 2, E: -1, W: 1, T: 0 }, { attack: 10, forage: 20 }),
+    rune('ruin', 'Ruin', 'gate', { M: -1, S: 2, F: -1, E: 1, W: -1, T: 0 }, { heal: -15, fragment: 15, itemRarity: 10 }),
+    rune('blood', 'Blood Moon', 'monster', { M: 2, S: -1, F: -1, E: -1, W: 1, T: 0 }, { attack: 20, leech: 15, rare: 15 }),
+    rune('haven', 'Haven', 'camp', { M: -1, S: 1, F: -1, E: 2, W: -1, T: 0 }, { hp: 10, heal: 20 }),
+    rune('trail', 'Trail', 'trail', { M: -1, S: -1, F: 1, E: -1, W: 2, T: 0 }, { hp: 10, bait: 20 }),
   ],
   placementRules: { maxPathSpread: 3, maxBranchesPerLane: 3 },
   huntingRules: { baitRareMultiplier: 3, loreStep: 0.1, loreMultiplierCap: 2, uniquePerAdventure: 1 },
@@ -69,36 +69,36 @@ export function cardEligible(card, level, depth) {
   return level >= p.minLevel && level <= p.maxLevel && depth >= p.minDepth && depth <= p.maxDepth;
 }
 export function validateProfile(input) {
-  const fail = message => { throw Error(`Profil: ${message}`); };
-  if (!input || input.schemaVersion !== PROFILE_SCHEMA_VERSION || typeof input.id !== 'string' || !input.id) fail('unbekannte oder fehlende Version.');
-  if (!Array.isArray(input.cardTypes) || input.cardTypes.length < 2 || input.cardTypes.length > 16) fail('2–16 Kartenarten erforderlich.');
+  const fail = message => { throw Error(`Profile: ${message}`); };
+  if (!input || input.schemaVersion !== PROFILE_SCHEMA_VERSION || typeof input.id !== 'string' || !input.id) fail('unknown or missing version.');
+  if (!Array.isArray(input.cardTypes) || input.cardTypes.length < 2 || input.cardTypes.length > 16) fail('2–16 card types are required.');
   const ids = input.cardTypes.map(item => item.id);
-  if (new Set(ids).size !== ids.length || ids.some(id => !/^[A-Z][A-Z0-9_]{0,7}$/.test(id))) fail('Kartenart-IDs müssen eindeutig und kurz sein.');
+  if (new Set(ids).size !== ids.length || ids.some(id => !/^[A-Z][A-Z0-9_]{0,7}$/.test(id))) fail('Card-type IDs must be unique and short.');
   const probability = input.cardTypes.reduce((sum, item) => sum + Number(item.baseProbability), 0);
-  if (Math.abs(probability - 100) > .01) fail(`Basiswahrscheinlichkeiten ergeben ${probability.toFixed(2)} statt 100 %.`);
+  if (Math.abs(probability - 100) > .01) fail(`Base probabilities total ${probability.toFixed(2)} instead of 100%.`);
   for (const item of input.cardTypes) {
-    if (!BEHAVIORS.includes(item.behavior) || !Number.isFinite(item.baseProbability) || item.baseProbability < 0 || !Number.isInteger(item.decisionWeight) || item.decisionWeight < 1 || item.decisionWeight > 6) fail(`ungültige Werte bei ${item.name || item.id}.`);
-    if (!item.rarityWeights || Math.abs(RARITIES.reduce((sum, key) => sum + Number(item.rarityWeights[key] || 0), 0) - 100) > .01) fail(`Raritäten von ${item.name || item.id} ergeben nicht 100 %.`);
+    if (!BEHAVIORS.includes(item.behavior) || !Number.isFinite(item.baseProbability) || item.baseProbability < 0 || !Number.isInteger(item.decisionWeight) || item.decisionWeight < 1 || item.decisionWeight > 6) fail(`invalid values for ${item.name || item.id}.`);
+    if (!item.rarityWeights || Math.abs(RARITIES.reduce((sum, key) => sum + Number(item.rarityWeights[key] || 0), 0) - 100) > .01) fail(`Rarity weights for ${item.name || item.id} do not total 100%.`);
     const p = item.placement;
-    if (!p || !Number.isInteger(p.minLevel) || !Number.isInteger(p.maxLevel) || p.minLevel < 1 || p.maxLevel > 5 || p.minLevel > p.maxLevel || !Number.isInteger(p.minDepth) || !Number.isInteger(p.maxDepth) || p.minDepth < 1 || p.minDepth > p.maxDepth) fail(`ungültiger Level-/Tiefenbereich bei ${item.name || item.id}.`);
+    if (!p || !Number.isInteger(p.minLevel) || !Number.isInteger(p.maxLevel) || p.minLevel < 1 || p.maxLevel > 5 || p.minLevel > p.maxLevel || !Number.isInteger(p.minDepth) || !Number.isInteger(p.maxDepth) || p.minDepth < 1 || p.minDepth > p.maxDepth) fail(`invalid level/depth range for ${item.name || item.id}.`);
   }
-  if (!Array.isArray(input.cards) || input.cards.some(item => !ids.includes(item.typeId) || !RARITIES.includes(item.rarity) || !Number.isFinite(item.selectionWeight) || item.selectionWeight <= 0 || !DECKS[item.deck])) fail('Kartenkatalog enthält ungültige Einträge.');
+  if (!Array.isArray(input.cards) || input.cards.some(item => !ids.includes(item.typeId) || !RARITIES.includes(item.rarity) || !Number.isFinite(item.selectionWeight) || item.selectionWeight <= 0 || !DECKS[item.deck])) fail('The card catalog contains invalid entries.');
   for (const item of input.cards) {
     const p = item.placement;
-    if (!p || !Number.isInteger(p.minLevel) || !Number.isInteger(p.maxLevel) || p.minLevel < 1 || p.maxLevel > 5 || p.minLevel > p.maxLevel || !Number.isInteger(p.minDepth) || !Number.isInteger(p.maxDepth) || p.minDepth < 1 || p.minDepth > p.maxDepth) fail(`ungültiger Level-/Tiefenbereich bei Karte ${item.name}.`);
-    if (item.behavior && !BEHAVIORS.includes(item.behavior)) fail(`unbekannte Verhaltensvorlage bei Karte ${item.name}.`);
-    if (item.behavior === 'resource' && (!item.produces?.resourceId || !Number.isInteger(item.produces.amount) || item.produces.amount < 1)) fail(`Ressourcenkarte ${item.name} benötigt Ressource und positive Menge.`);
-    if (item.behavior === 'gate' && item.requires && (!item.requires.resourceId || !Number.isInteger(item.requires.amount) || item.requires.amount < 1)) fail(`Tür ${item.name} enthält eine ungültige Voraussetzung.`);
+    if (!p || !Number.isInteger(p.minLevel) || !Number.isInteger(p.maxLevel) || p.minLevel < 1 || p.maxLevel > 5 || p.minLevel > p.maxLevel || !Number.isInteger(p.minDepth) || !Number.isInteger(p.maxDepth) || p.minDepth < 1 || p.minDepth > p.maxDepth) fail(`invalid level/depth range for card ${item.name}.`);
+    if (item.behavior && !BEHAVIORS.includes(item.behavior)) fail(`unknown behavior template for card ${item.name}.`);
+    if (item.behavior === 'resource' && (!item.produces?.resourceId || !Number.isInteger(item.produces.amount) || item.produces.amount < 1)) fail(`Resource card ${item.name} requires a resource ID and positive amount.`);
+    if (item.behavior === 'gate' && item.requires && (!item.requires.resourceId || !Number.isInteger(item.requires.amount) || item.requires.amount < 1)) fail(`Gate ${item.name} has an invalid requirement.`);
   }
-  for (const deck of Object.keys(DECKS)) for (const item of input.cardTypes.filter(type => type.baseProbability > 0)) if (!input.cards.some(card => card.deck === deck && card.typeId === item.id)) fail(`${DECKS[deck].name} besitzt keine Karte für ${item.name}.`);
-  if (!Array.isArray(input.runes) || input.runes.length < 3 || new Set(input.runes.map(item => item.id)).size !== input.runes.length) fail('mindestens drei eindeutige Runen erforderlich.');
+  for (const deck of Object.keys(DECKS)) for (const item of input.cardTypes.filter(type => type.baseProbability > 0)) if (!input.cards.some(card => card.deck === deck && card.typeId === item.id)) fail(`${DECKS[deck].name} has no card for ${item.name}.`);
+  if (!Array.isArray(input.runes) || input.runes.length < 3 || new Set(input.runes.map(item => item.id)).size !== input.runes.length) fail('at least three unique runes are required.');
   for (const item of input.runes) {
-    if (ids.some(id => !Number.isInteger(Number(item.cardDeltas?.[id] || 0)))) fail(`Rune ${item.name} enthält keine ganzen Kartenwerte.`);
-    if (Object.keys(item.modifiers || {}).some(key => !EFFECT_KEYS.includes(key) || !Number.isFinite(Number(item.modifiers[key])))) fail(`Rune ${item.name} enthält einen unbekannten Modifikator.`);
+    if (ids.some(id => !Number.isInteger(Number(item.cardDeltas?.[id] || 0)))) fail(`Rune ${item.name} contains non-integer card values.`);
+    if (Object.keys(item.modifiers || {}).some(key => !EFFECT_KEYS.includes(key) || !Number.isFinite(Number(item.modifiers[key])))) fail(`Rune ${item.name} contains an unknown modifier.`);
   }
-  if (!Number.isInteger(input.startInventory?.bait) || input.startInventory.bait < 0 || input.startInventory.bait > 99) fail('Startköder muss zwischen 0 und 99 liegen.');
+  if (!Number.isInteger(input.startInventory?.bait) || input.startInventory.bait < 0 || input.startInventory.bait > 99) fail('Starting bait must be between 0 and 99.');
   const h = input.huntingRules;
-  if (!h || h.baitRareMultiplier <= 0 || h.loreStep < 0 || h.loreMultiplierCap < 1 || !Number.isInteger(h.uniquePerAdventure) || h.uniquePerAdventure < 0) fail('ungültige Jagdregeln.');
+  if (!h || h.baitRareMultiplier <= 0 || h.loreStep < 0 || h.loreMultiplierCap < 1 || !Number.isInteger(h.uniquePerAdventure) || h.uniquePerAdventure < 0) fail('invalid hunting rules.');
   return structuredClone(input);
 }
 
@@ -112,8 +112,8 @@ export function profileHash(profile) {
 }
 export function exportProfile(profile) { return JSON.stringify(validateProfile(profile), null, 2); }
 export function importProfile(text) {
-  if (typeof text !== 'string' || text.length > 2_000_000) throw Error('Profildatei ist zu groß (maximal 2 MB).');
+  if (typeof text !== 'string' || text.length > 2_000_000) throw Error('Profile file is too large (maximum 2 MB).');
   let value;
-  try { value = JSON.parse(text); } catch { throw Error('Die Profildatei enthält kein gültiges JSON.'); }
+  try { value = JSON.parse(text); } catch { throw Error('The profile file does not contain valid JSON.'); }
   return validateProfile(value);
 }

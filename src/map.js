@@ -33,8 +33,8 @@ export function renderMap(graph, state, selected) {
   const nodes = graph.nodes.filter(n => visibility(graph, state, n.id) !== 'hidden').map(n => {
     const v = visibility(graph, state, n.id), a = accessibility(graph, state, n.id), active = a === 'current';
     const unknown = v === 'unknown';
-    const label = unknown ? '' : n.kind === 'start' ? 'DER WEGSTEIN' : n.kind === 'end' ? (n.special === 'descent' ? 'ABSTIEG' : 'AUSGANG') : n.special === 'boss' ? 'ENDBOSS' : n.special === 'miniboss' ? 'MINIBOSS' : v === 'rumor' ? 'GERÜCHT' : n.special === 'fragment' ? 'SCHLÜSSELTEIL' : n.special === 'choice' ? 'WERTVOLLE ALTERNATIVE' : n.special === 'gate' ? (n.secretKind === 'trail' ? 'GEHEIMPFAD' : 'GEHEIMTOR') : n.special === 'treasure' ? (n.unique ? 'EINZIGARTIGER FUND' : 'SCHATZKAMMER') : '';
-    return `<g id="node-${n.id}" data-node="${n.id}" class="map-node ${a} ${v} ${!unknown && ['boss', 'miniboss'].includes(n.special) ? 'boss-node' : ''} ${n.id === selected ? 'selected' : ''}" style="${!unknown && n.typeColor ? `color:${escape(n.typeColor)}` : ''}" transform="translate(${n.x},${n.y})" tabindex="0" role="button" aria-label="${unknown ? 'Unbekannter Ort' : escape(n.name)} – ${v === 'rumor' ? 'Gerücht' : a === 'next' ? 'betretbar' : a === 'current' ? 'aktueller Ort' : a === 'missed' ? 'verpasst' : 'inspizieren'}">
+    const label = unknown ? '' : n.kind === 'start' ? 'THE WAYSTONE' : n.kind === 'end' ? (n.special === 'descent' ? 'DESCENT' : 'EXIT') : n.special === 'boss' ? 'FINAL BOSS' : n.special === 'miniboss' ? 'MINIBOSS' : v === 'rumor' ? 'RUMOR' : n.special === 'fragment' ? 'KEY FRAGMENT' : n.special === 'choice' ? 'VALUABLE ALTERNATIVE' : n.special === 'gate' ? (n.secretKind === 'trail' ? 'SECRET TRAIL' : 'SECRET GATE') : n.special === 'treasure' ? (n.unique ? 'UNIQUE FIND' : 'VAULT') : '';
+    return `<g id="node-${n.id}" data-node="${n.id}" class="map-node ${a} ${v} ${!unknown && ['boss', 'miniboss'].includes(n.special) ? 'boss-node' : ''} ${n.id === selected ? 'selected' : ''}" style="${!unknown && n.typeColor ? `color:${escape(n.typeColor)}` : ''}" transform="translate(${n.x},${n.y})" tabindex="0" role="button" aria-label="${unknown ? 'Unknown location' : escape(n.name)} – ${v === 'rumor' ? 'Rumor' : a === 'next' ? 'enterable' : a === 'current' ? 'current location' : a === 'missed' ? 'missed' : 'inspect'}">
       <circle class="hit-area" r="35"/>
       ${active ? '<circle class="current-ring" r="30"/><path class="player" d="m-5-40 5 7 5-7Z"/>' : ''}
       ${v === 'rumor' ? '<circle class="rumor-ring" r="29"/>' : ''}
@@ -44,7 +44,7 @@ export function renderMap(graph, state, selected) {
       ${state.resolvedEncounters[n.id] ? '<circle class="done-dot" cx="21" cy="-19" r="8"/><path class="done-check" d="m17-19 3 3 5-6"/>' : ''}
     </g>`;
   }).join('');
-  return `<svg class="adventure-map theme-${graph.deck.style}" viewBox="0 0 ${graph.width} ${graph.height}" style="--map-ratio:${graph.width}/${graph.height};--map-min:${graph.routes.length === 3 ? 560 : 380}px" aria-label="Abenteuerkarte, Start unten, Ziel oben">
+  return `<svg class="adventure-map theme-${graph.deck.style}" viewBox="0 0 ${graph.width} ${graph.height}" style="--map-ratio:${graph.width}/${graph.height};--map-min:${graph.routes.length === 3 ? 560 : 380}px" aria-label="Adventure map, start at the bottom, goal at the top">
     <defs><pattern id="contours" x="0" y="0" width="210" height="240" patternUnits="userSpaceOnUse"><path d="M-30 130C80 0 90 230 240 110M-30 140C80 10 90 240 240 120M-30 150C80 20 90 250 240 130M-30 160C80 30 90 260 240 140" fill="none" stroke="#8c947f" stroke-opacity=".07"/></pattern><filter id="fog-soft"><feGaussianBlur stdDeviation="18"/></filter></defs>
     <rect width="100%" height="100%" fill="url(#contours)"/>
     ${scenery(graph)}
@@ -52,13 +52,13 @@ export function renderMap(graph, state, selected) {
     <g class="edges">${edgeMarkup}</g>
     <g class="fog-bank" filter="url(#fog-soft)" aria-hidden="true">${fog}</g>
     ${nodes}
-    <text class="map-bottom" x="${graph.width / 2}" y="${graph.height - 17}" text-anchor="middle">DEIN ABENTEUER BEGINNT HIER</text>
+    <text class="map-bottom" x="${graph.width / 2}" y="${graph.height - 17}" text-anchor="middle">YOUR ADVENTURE BEGINS HERE</text>
   </svg>`;
 }
 export function renderGenerationStep(graph, step) {
   const nodes = step.snapshot.nodes || [], edges = step.snapshot.edges || [], byId = new Map(nodes.map(node => [node.id, node]));
-  if (!nodes.length) return `<div class="trace-placeholder"><span>${icon('waystone')}</span><strong>Die Karte entsteht in Schritt 4.</strong><small>Dieser Schritt berechnet und prüft die Datenbasis.</small></div>`;
-  return `<svg class="trace-map" viewBox="0 0 ${graph.width} ${graph.height}" aria-label="Generatorstufe ${escape(step.phase)}">
+  if (!nodes.length) return `<div class="trace-placeholder"><span>${icon('waystone')}</span><strong>The map takes shape in step 4.</strong><small>This step calculates and validates the data model.</small></div>`;
+  return `<svg class="trace-map" viewBox="0 0 ${graph.width} ${graph.height}" aria-label="Generation step ${escape(step.phase)}">
     ${edges.filter(edge => byId.has(edge.from) && byId.has(edge.to)).map(edge => { const a = byId.get(edge.from), b = byId.get(edge.to); return `<path d="M${a.x},${a.y} L${b.x},${b.y}"/>`; }).join('')}
     ${nodes.map(node => `<g transform="translate(${node.x},${node.y})" style="color:${escape(node.typeColor || '#66765d')}"><circle r="${node.kind === 'encounter' ? 13 : 16}"/><g transform="translate(-8,-8) scale(.5)" fill="none" stroke="currentColor" stroke-width="2">${paths[nodeIcon(node)] || paths.unknown}</g></g>`).join('')}
   </svg>`;
